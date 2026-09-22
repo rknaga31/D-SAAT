@@ -21,6 +21,8 @@ import webbrowser
 from pathlib import Path
 from typing import Generator, Optional
 
+import base64
+from pydantic import BaseModel
 import cv2
 import numpy as np
 import uvicorn
@@ -179,20 +181,21 @@ def generate_synthetic_frame() -> bytes:
 
 
 # ── Processing Pipeline Background Worker ─────────────────────────────────────
+class ClientFramePayload(BaseModel):
+    image: str
+
+
 class WebPipelineWorker:
     def __init__(self, cfg: dict):
         self.cfg = cfg
         self.video_cap = None
         self.audio_cap = None
         self.proc_thread = None
+        self.pipeline = None
 
     def start(self, no_audio: bool = False) -> bool:
         global _DEMO_MODE
-        self.video_cap = VideoCapture(self.cfg)
-        if not self.video_cap.start():
-            log.warning("Webcam not accessible. Defaulting to Demo Mode simulation.")
-            _DEMO_MODE = True
-            return False
+        from main import ProcessingPipeline
 
         if not no_audio:
             self.audio_cap = AudioCapture(self.cfg)
@@ -200,9 +203,23 @@ class WebPipelineWorker:
                 log.warning("Audio device unavailable. Running video-only.")
                 self.audio_cap = None
 
-        from main import ProcessingPipeline
-        pipeline = ProcessingPipeline(self.cfg, self.video_cap, self.audio_cap, SHARED_STATE)
-        self.proc_thread = threading.Thread(target=pipeline.run, name="WebProcessing", daemon=True)
+        self.video_cap = VideoCapture(self.cfg)
+        video_started = self.video_cap.start()
+
+        # Always initialize pipeline so client browser frames can be processed immediately
+        self.pipeline = ProcessingPipeline(
+            self.cfg,
+            self.video_cap if video_started else None,
+            self.audio_cap,
+            SHARED_STATE
+        )
+
+        if not video_started:
+            log.warning("Webcam not accessible on host. Client browser webcam and Demo mode are active.")
+            _DEMO_MODE = True
+            return False
+
+        self.proc_thread = threading.Thread(target=self.pipeline.run, name="WebProcessing", daemon=True)
         self.proc_thread.start()
         return True
 
@@ -265,6 +282,45 @@ def toggle_demo_mode():
     return JSONResponse({"demo_mode": _DEMO_MODE})
 
 
+@app.post("/api/process_client_frame")
+async def process_client_frame(payload: ClientFramePayload):
+    """Processes a video frame streamed from the client's browser webcam."""
+    global _DEMO_MODE, worker
+    if worker is None or worker.pipeline is None:
+        return JSONResponse({"error": "Pipeline not initialized"}, status_code=503)
+
+    try:
+        data_str = payload.image
+        if "," in data_str:
+            data_str = data_str.split(",", 1)[1]
+        img_bytes = base64.b64decode(data_str)
+        nparr = np.frombuffer(img_bytes, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if frame is None:
+            return JSONResponse({"error": "Invalid image payload"}, status_code=400)
+
+        # Process frame through full D-SAAT AI pipeline
+        telemetry_update, annotated_bgr = worker.pipeline.process_single_frame(frame)
+        _DEMO_MODE = False
+
+        # Encode annotated frame with face mesh / reticle overlay
+        _, jpg = cv2.imencode(".jpg", annotated_bgr, [cv2.IMWRITE_JPEG_QUALITY, 75])
+        annotated_b64 = "data:image/jpeg;base64," + base64.b64encode(jpg.tobytes()).decode("utf-8")
+
+        snap = SHARED_STATE.snapshot()
+        clean_snap = sanitize_telemetry(snap)
+        clean_snap["demo_mode"] = False
+
+        return JSONResponse({
+            "status": "ok",
+            "telemetry": clean_snap,
+            "annotated_frame": annotated_b64
+        })
+    except Exception as exc:
+        log.error(f"Error processing client frame: {exc}")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
 def frame_stream_generator() -> Generator[bytes, None, None]:
     """Generates continuous MJPEG multipart stream for <img> tag."""
     while not _shutdown.is_set():
@@ -289,7 +345,7 @@ def video_feed():
 
 
 # ── Launcher ──────────────────────────────────────────────────────────────────
-def launch_server(host: str = "127.0.0.1", port: int = 8000, demo: bool = False,
+def launch_server(host: str = "0.0.0.0", port: int = 8000, demo: bool = False,
                   no_audio: bool = False, open_browser: bool = True):
     global _DEMO_MODE, worker
     _DEMO_MODE = demo
@@ -301,10 +357,13 @@ def launch_server(host: str = "127.0.0.1", port: int = 8000, demo: bool = False,
         cfg = yaml.safe_load(f)
     configure_from_config(cfg)
 
-    # Start camera pipeline if not demo
+    # Initialize pipeline worker (ready for both hardware and client browser camera)
+    worker = WebPipelineWorker(cfg)
     if not demo:
-        worker = WebPipelineWorker(cfg)
         worker.start(no_audio=no_audio)
+    else:
+        from main import ProcessingPipeline
+        worker.pipeline = ProcessingPipeline(cfg, None, None, SHARED_STATE)
 
     url = f"http://{host}:{port}" if host != "0.0.0.0" else f"http://localhost:{port}"
     log.info("=" * 60)
@@ -330,7 +389,7 @@ def launch_server(host: str = "127.0.0.1", port: int = 8000, demo: bool = False,
 
 
 if __name__ == "__main__":
-    default_host = os.environ.get("HOST", "127.0.0.1")
+    default_host = os.environ.get("HOST", "0.0.0.0")
     default_port = int(os.environ.get("PORT", 8000))
 
     parser = argparse.ArgumentParser(description="D-SAAT Localhost Web Server")

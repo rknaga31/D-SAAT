@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: d-saat-cockpit
+    env: docker
+    plan: free
+    region: oregon
+    dockerfilePath: Dockerfile
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: HEADLESS
+        value: 1
+      - key: HOST
+        value: 0.0.0.0

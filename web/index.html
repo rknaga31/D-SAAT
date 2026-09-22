@@ -26,6 +26,11 @@
         SESSION 00:00 · 30.0 FPS
       </div>
 
+      <button id="btnBrowserCam" class="btn-toggle" title="Stream Browser Webcam to Cloud/Local AI">
+        <span id="camIcon">📷</span>
+        <span id="camText">Browser Cam: OFF</span>
+      </button>
+
       <button id="btnDemoToggle" class="btn-toggle" title="Toggle Demo Mode">
         <span>🎮</span>
         <span id="btnDemoText">Demo Simulation</span>
@@ -251,6 +256,10 @@
       </div>
     </div>
   </section>
+
+  <!-- ── Hidden Browser Webcam Capture Elements ─────────────────── -->
+  <video id="clientVideo" autoplay playsinline muted style="display:none;"></video>
+  <canvas id="clientCanvas" width="640" height="480" style="display:none;"></canvas>
 
   <!-- ── JavaScript Application ───────────────────────────────────── -->
   <script src="/static/app.js"></script>

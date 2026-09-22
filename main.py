@@ -22,7 +22,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 import cv2
 import numpy as np
@@ -72,7 +72,7 @@ class ProcessingPipeline:
     feature extractors, fuses scores, and pushes results to SharedState.
     """
 
-    def __init__(self, cfg: dict, video_cap: VideoCapture,
+    def __init__(self, cfg: dict, video_cap: Optional[VideoCapture],
                  audio_cap: Optional[AudioCapture],
                  shared_state: SharedState):
         self.cfg = cfg
@@ -96,6 +96,132 @@ class ProcessingPipeline:
         self._frame_count: int = 0
         self._audio_process_interval: int = 6  # process audio every N frames
 
+    def process_single_frame(self, frame: np.ndarray, frame_ts: Optional[float] = None,
+                             audio_chunk: Optional[np.ndarray] = None) -> Tuple[dict, np.ndarray]:
+        """
+        Process an arbitrary frame (from local webcam, file, or browser stream).
+        Updates state and returns (telemetry_dict, annotated_frame).
+        """
+        if frame_ts is None:
+            frame_ts = time.time()
+        self._frame_count += 1
+
+        # ── Visual features ────────────────────────────────
+        vis = self.visual_ext.process(frame, frame_ts)
+
+        # ── rPPG ───────────────────────────────────────────
+        if vis.face_roi is not None:
+            self.rppg_ext.update(vis.face_roi, frame_ts)
+        rppg = self.rppg_ext.get_features()
+
+        # ── Audio (if provided or from cap) ────────────────
+        audio_feat = None
+        if audio_chunk is not None:
+            self.audio_ext.update(audio_chunk)
+            audio_feat = self.audio_ext.get_features(audio_chunk)
+        elif self.audio_cap and self._frame_count % self._audio_process_interval == 0:
+            chunk, _ = self.audio_cap.get_latest_chunk()
+            if chunk is not None:
+                self.audio_ext.update(chunk)
+                audio_feat = self.audio_ext.get_features(chunk)
+
+        # ── Smartwatch (4th Modality) ──────────────────────
+        smartwatch_feat = self.smartwatch_ext.get_features()
+
+        # ── Fusion ─────────────────────────────────────────
+        fused = self.fusion.fuse(vis, rppg, audio_feat, smartwatch_feat)
+
+        # ── Risk scoring ───────────────────────────────────
+        assessment = self.scorer.score(fused)
+
+        # ── Alert management ───────────────────────────────
+        alert_msg = self.alerter.process(assessment)
+
+        # ── Push to SharedState for dashboard ──────────────
+        annotated = vis.annotated_frame if vis.annotated_frame is not None else frame
+
+        # Encode frame as JPEG bytes
+        _, jpg = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 80])
+
+        current_fps = self.video_cap.actual_fps if self.video_cap else 30.0
+
+        telemetry_update = dict(
+            # Frame
+            frame_jpg=jpg.tobytes(),
+            frame_ts=frame_ts,
+            frame_count=self._frame_count,
+
+            # Visual
+            face_detected=vis.face_detected,
+            ear=vis.ear,
+            ear_left=vis.ear_left,
+            ear_right=vis.ear_right,
+            mar=vis.mar,
+            perclos=vis.perclos,
+            blink_rate=vis.blink_rate_per_min,
+            blink_count=vis.blink_count,
+            eye_closed=vis.eye_closed,
+            yawn_detected_visual=vis.yawn_detected,
+            yawn_count_visual=vis.yawn_count,
+            pitch=vis.pitch,
+            yaw=vis.yaw,
+            roll=vis.roll,
+            head_pose_alert=vis.head_pose_alert,
+
+            # rPPG
+            heart_rate=rppg.heart_rate_bpm,
+            hrv_rmssd=rppg.hrv_rmssd,
+            rppg_quality=rppg.signal_quality,
+            rppg_filtered=rppg.filtered_signal,
+            hr_alert=rppg.hr_alert,
+
+            # Audio
+            breathing_rate=fused.breathing_rate if audio_feat else 0.0,
+            yawn_score_audio=fused.yawn_score if audio_feat else 0.0,
+            audio_drowsiness=audio_feat.audio_drowsiness_score if audio_feat else 0.0,
+
+            # Smartwatch (4th Modality)
+            smartwatch_hr=smartwatch_feat.heart_rate_bpm if smartwatch_feat else 0.0,
+            smartwatch_spo2=smartwatch_feat.spo2 if smartwatch_feat else 98.0,
+            smartwatch_stress=smartwatch_feat.stress_level if smartwatch_feat else 20.0,
+            smartwatch_hrv=smartwatch_feat.hrv_rmssd if smartwatch_feat else 0.0,
+            smartwatch_connected=smartwatch_feat.is_connected if smartwatch_feat else False,
+            smartwatch_confidence=smartwatch_feat.confidence if smartwatch_feat else 0.0,
+            cross_val_status=fused.cross_validation_status,
+            cross_val_diff=fused.cross_validation_diff,
+            cross_val_confidence=fused.cross_validation_confidence,
+
+            # Fusion
+            visual_score=fused.visual_score,
+            rppg_score=fused.rppg_score,
+            audio_score=fused.audio_score,
+            smartwatch_score=fused.smartwatch_score,
+            fused_score=fused.fused_score,
+            smoothed_score=fused.smoothed_score,
+            w_visual=fused.w_visual,
+            w_rppg=fused.w_rppg,
+            w_audio=fused.w_audio,
+            w_smartwatch=fused.w_smartwatch,
+
+            # Assessment
+            alert_level=assessment.alert_level,
+            alert_label=assessment.alert_label,
+            alert_color=assessment.color,
+            alert_emoji=assessment.emoji,
+            alert_message=alert_msg or assessment.alert_reason or "",
+            session_duration=assessment.session_duration_sec,
+            drowsy_events=assessment.total_drowsy_events,
+            critical_events=assessment.critical_event_count,
+            score_trend=assessment.score_trend,
+
+            # System
+            actual_fps=current_fps,
+            pipeline_running=True,
+        )
+
+        self.state.update(**telemetry_update)
+        return telemetry_update, annotated
+
     def run(self) -> None:
         """Main processing loop."""
         log.info("ProcessingPipeline started.")
@@ -104,122 +230,17 @@ class ProcessingPipeline:
         while not _shutdown.is_set():
             loop_start = time.time()
 
+            if self.video_cap is None:
+                time.sleep(0.05)
+                continue
+
             # ── Grab latest video frame ────────────────────────
             frame, frame_ts = self.video_cap.get_latest_frame()
             if frame is None:
                 time.sleep(0.01)
                 continue
 
-            self._frame_count += 1
-
-            # ── Visual features ────────────────────────────────
-            vis = self.visual_ext.process(frame, frame_ts)
-
-            # ── rPPG ───────────────────────────────────────────
-            if vis.face_roi is not None:
-                self.rppg_ext.update(vis.face_roi, frame_ts)
-            rppg = self.rppg_ext.get_features()
-
-            # ── Audio (every N frames) ─────────────────────────
-            audio_feat = None
-            if self.audio_cap and self._frame_count % self._audio_process_interval == 0:
-                chunk, _ = self.audio_cap.get_latest_chunk()
-                if chunk is not None:
-                    self.audio_ext.update(chunk)
-                    audio_feat = self.audio_ext.get_features(chunk)
-
-            # ── Smartwatch (4th Modality) ──────────────────────
-            smartwatch_feat = self.smartwatch_ext.get_features()
-
-            # ── Fusion ─────────────────────────────────────────
-            fused = self.fusion.fuse(vis, rppg, audio_feat, smartwatch_feat)
-
-            # ── Risk scoring ───────────────────────────────────
-            assessment = self.scorer.score(fused)
-
-            # ── Alert management ───────────────────────────────
-            alert_msg = self.alerter.process(assessment)
-
-            # ── Push to SharedState for dashboard ──────────────
-            annotated = vis.annotated_frame if vis.annotated_frame is not None else frame
-
-            # Encode frame as JPEG bytes for Streamlit display
-            _, jpg = cv2.imencode(".jpg", annotated,
-                                  [cv2.IMWRITE_JPEG_QUALITY, 80])
-
-            self.state.update(
-                # Frame
-                frame_jpg=jpg.tobytes(),
-                frame_ts=frame_ts,
-                frame_count=self._frame_count,
-
-                # Visual
-                face_detected=vis.face_detected,
-                ear=vis.ear,
-                ear_left=vis.ear_left,
-                ear_right=vis.ear_right,
-                mar=vis.mar,
-                perclos=vis.perclos,
-                blink_rate=vis.blink_rate_per_min,
-                blink_count=vis.blink_count,
-                eye_closed=vis.eye_closed,
-                yawn_detected_visual=vis.yawn_detected,
-                yawn_count_visual=vis.yawn_count,
-                pitch=vis.pitch,
-                yaw=vis.yaw,
-                roll=vis.roll,
-                head_pose_alert=vis.head_pose_alert,
-
-                # rPPG
-                heart_rate=rppg.heart_rate_bpm,
-                hrv_rmssd=rppg.hrv_rmssd,
-                rppg_quality=rppg.signal_quality,
-                rppg_filtered=rppg.filtered_signal,
-                hr_alert=rppg.hr_alert,
-
-                # Audio
-                breathing_rate=fused.breathing_rate if audio_feat else 0.0,
-                yawn_score_audio=fused.yawn_score if audio_feat else 0.0,
-                audio_drowsiness=audio_feat.audio_drowsiness_score if audio_feat else 0.0,
-
-                # Smartwatch (4th Modality)
-                smartwatch_hr=smartwatch_feat.heart_rate_bpm if smartwatch_feat else 0.0,
-                smartwatch_spo2=smartwatch_feat.spo2 if smartwatch_feat else 98.0,
-                smartwatch_stress=smartwatch_feat.stress_level if smartwatch_feat else 20.0,
-                smartwatch_hrv=smartwatch_feat.hrv_rmssd if smartwatch_feat else 0.0,
-                smartwatch_connected=smartwatch_feat.is_connected if smartwatch_feat else False,
-                smartwatch_confidence=smartwatch_feat.confidence if smartwatch_feat else 0.0,
-                cross_val_status=fused.cross_validation_status,
-                cross_val_diff=fused.cross_validation_diff,
-                cross_val_confidence=fused.cross_validation_confidence,
-
-                # Fusion
-                visual_score=fused.visual_score,
-                rppg_score=fused.rppg_score,
-                audio_score=fused.audio_score,
-                smartwatch_score=fused.smartwatch_score,
-                fused_score=fused.fused_score,
-                smoothed_score=fused.smoothed_score,
-                w_visual=fused.w_visual,
-                w_rppg=fused.w_rppg,
-                w_audio=fused.w_audio,
-                w_smartwatch=fused.w_smartwatch,
-
-                # Assessment
-                alert_level=assessment.alert_level,
-                alert_label=assessment.alert_label,
-                alert_color=assessment.color,
-                alert_emoji=assessment.emoji,
-                alert_message=alert_msg or assessment.alert_reason or "",
-                session_duration=assessment.session_duration_sec,
-                drowsy_events=assessment.total_drowsy_events,
-                critical_events=assessment.critical_event_count,
-                score_trend=assessment.score_trend,
-
-                # System
-                actual_fps=self.video_cap.actual_fps,
-                pipeline_running=True,
-            )
+            self.process_single_frame(frame, frame_ts)
 
             # ── Frame rate control ─────────────────────────────
             elapsed = time.time() - loop_start
@@ -227,6 +248,7 @@ class ProcessingPipeline:
             time.sleep(sleep_time)
 
         log.info("ProcessingPipeline stopped after %d frames.", self._frame_count)
+
 
 
 # ── Signal handling ───────────────────────────────────────────────────────────

@@ -89,3 +89,7 @@ logs/
 recordings/
 temp/
 scratch/
+
+# Local tools & executables
+tools/
+*.exe

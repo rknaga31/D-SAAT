@@ -17,11 +17,15 @@ soundfile>=0.12.1
 torch>=2.0.0
 torchvision>=0.15.0
 
-# Dashboard
+# Dashboard & Web Cockpit
 streamlit>=1.28.0
 streamlit-autorefresh>=1.0.1
 plotly>=5.17.0
 altair>=5.0.0
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+websockets>=12.0
 
 # Configuration & utilities
 pyyaml>=6.0.1

@@ -8,6 +8,10 @@ const state = {
   audioMuted: false,
   lastAlertLevel: 0,
   historyMaxPoints: 60,
+  browserCamActive: false,
+  browserCamStream: null,
+  browserCamInterval: null,
+  isSendingFrame: false,
   history: {
     times: [],
     rppgHr: [],
@@ -91,6 +95,12 @@ function playTestChime() {
 // ── DOM References ──────────────────────────────────────────────────────────
 const dom = {
   modeBadge: document.getElementById('modeBadge'),
+  btnBrowserCam: document.getElementById('btnBrowserCam'),
+  camIcon: document.getElementById('camIcon'),
+  camText: document.getElementById('camText'),
+  clientVideo: document.getElementById('clientVideo'),
+  clientCanvas: document.getElementById('clientCanvas'),
+  videoFeed: document.getElementById('videoFeed'),
   btnDemoToggle: document.getElementById('btnDemoToggle'),
   btnDemoText: document.getElementById('btnDemoText'),
   btnAudioToggle: document.getElementById('btnAudioToggle'),
@@ -133,7 +143,7 @@ const dom = {
   telemetryCanvas: document.getElementById('telemetryChart')
 };
 
-// ── Setup Audio & Demo Listeners ────────────────────────────────────────────
+// ── Setup Listeners ─────────────────────────────────────────────────────────
 window.addEventListener('click', () => initAudio(), { once: true });
 
 if (dom.btnTestAudio) {
@@ -157,30 +167,148 @@ dom.btnAudioToggle.addEventListener('click', () => {
 });
 
 dom.btnDemoToggle.addEventListener('click', async () => {
+  if (state.browserCamActive) {
+    stopBrowserWebcam();
+  }
   try {
     const res = await fetch('/api/demo_mode', { method: 'POST' });
     const data = await res.json();
     state.demoMode = data.demo_mode;
-    updateModeDisplay(state.demoMode);
+    updateModeDisplay();
   } catch (err) {
     console.error('Failed to toggle demo mode:', err);
   }
 });
 
-function updateModeDisplay(isDemo) {
-  if (isDemo) {
+if (dom.btnBrowserCam) {
+  dom.btnBrowserCam.addEventListener('click', () => {
+    if (state.browserCamActive) {
+      stopBrowserWebcam();
+    } else {
+      startBrowserWebcam();
+    }
+  });
+}
+
+function updateModeDisplay() {
+  if (state.browserCamActive) {
+    dom.modeBadge.textContent = 'BROWSER WEBCAM (LIVE)';
+    dom.modeBadge.className = 'capsule-badge capsule-live';
+    if (dom.btnBrowserCam) dom.btnBrowserCam.classList.add('active');
+    if (dom.camIcon) dom.camIcon.textContent = '📸';
+    if (dom.camText) dom.camText.textContent = 'Browser Cam: ON';
+    dom.btnDemoToggle.classList.remove('active');
+  } else if (state.demoMode) {
     dom.modeBadge.textContent = 'DEMO SIMULATION';
     dom.modeBadge.className = 'capsule-badge capsule-demo';
     dom.btnDemoToggle.classList.add('active');
+    if (dom.btnBrowserCam) dom.btnBrowserCam.classList.remove('active');
+    if (dom.camIcon) dom.camIcon.textContent = '📷';
+    if (dom.camText) dom.camText.textContent = 'Browser Cam: OFF';
   } else {
     dom.modeBadge.textContent = 'LIVE FEED';
     dom.modeBadge.className = 'capsule-badge capsule-live';
     dom.btnDemoToggle.classList.remove('active');
+    if (dom.btnBrowserCam) dom.btnBrowserCam.classList.remove('active');
+    if (dom.camIcon) dom.camIcon.textContent = '📷';
+    if (dom.camText) dom.camText.textContent = 'Browser Cam: OFF';
+  }
+}
+
+// ── Browser Camera Streaming ────────────────────────────────────────────────
+async function startBrowserWebcam() {
+  initAudio();
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert("Camera API requires HTTPS or localhost. Please ensure you are viewing this site over HTTPS.");
+    return;
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        width: { ideal: 640 },
+        height: { ideal: 480 },
+        facingMode: 'user'
+      },
+      audio: false
+    });
+
+    state.browserCamStream = stream;
+    dom.clientVideo.srcObject = stream;
+    await dom.clientVideo.play();
+
+    state.browserCamActive = true;
+    state.demoMode = false;
+    updateModeDisplay();
+
+    // Stream frames to server every 80ms (~12-13 FPS)
+    state.browserCamInterval = setInterval(sendClientFrame, 80);
+  } catch (err) {
+    console.error("Camera access error:", err);
+    alert("Could not access camera: " + (err.message || err.name) + "\n\nPlease ensure camera permission is granted in your browser address bar.");
+    stopBrowserWebcam();
+  }
+}
+
+function stopBrowserWebcam() {
+  state.browserCamActive = false;
+  if (state.browserCamInterval) {
+    clearInterval(state.browserCamInterval);
+    state.browserCamInterval = null;
+  }
+  if (state.browserCamStream) {
+    state.browserCamStream.getTracks().forEach(t => t.stop());
+    state.browserCamStream = null;
+  }
+  if (dom.clientVideo) {
+    dom.clientVideo.srcObject = null;
+  }
+  if (dom.videoFeed) {
+    dom.videoFeed.src = '/api/video_feed?t=' + Date.now();
+  }
+  updateModeDisplay();
+}
+
+async function sendClientFrame() {
+  if (!state.browserCamActive || state.isSendingFrame) return;
+  const video = dom.clientVideo;
+  if (!video || video.readyState < 2) return;
+
+  const canvas = dom.clientCanvas;
+  const ctx = canvas.getContext('2d');
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 480;
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.70);
+  state.isSendingFrame = true;
+
+  try {
+    const res = await fetch('/api/process_client_frame', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: dataUrl })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.annotated_frame && dom.videoFeed) {
+        dom.videoFeed.src = data.annotated_frame;
+      }
+      if (data.telemetry) {
+        renderSnapshot(data.telemetry);
+      }
+    }
+  } catch (err) {
+    console.warn("Client frame upload error:", err);
+  } finally {
+    state.isSendingFrame = false;
   }
 }
 
 // ── Telemetry Fetch & UI Render Loop ─────────────────────────────────────────
 async function fetchTelemetry() {
+  if (state.browserCamActive) return; // Updated directly from frame stream
   try {
     const res = await fetch('/api/telemetry');
     if (!res.ok) return;
@@ -192,8 +320,10 @@ async function fetchTelemetry() {
 }
 
 function renderSnapshot(s) {
-  state.demoMode = !!s.demo_mode;
-  updateModeDisplay(state.demoMode);
+  if (!state.browserCamActive) {
+    state.demoMode = !!s.demo_mode;
+  }
+  updateModeDisplay();
 
   // 1. Session Duration & FPS
   const durSec = Math.floor(s.session_duration || 0);
