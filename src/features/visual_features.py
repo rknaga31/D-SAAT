@@ -91,6 +91,9 @@ class VisualFeatures:
     ear_left: float = 0.0
     ear_right: float = 0.0
     eye_closed: bool = False
+    eye_blink_left: float = 0.0
+    eye_blink_right: float = 0.0
+    blink_score: float = 0.0
     blink_detected: bool = False
     blink_count: int = 0
     blink_rate_per_min: float = 0.0
@@ -149,10 +152,11 @@ class VisualFeatureExtractor:
                     min_face_detection_confidence=0.5,
                     min_face_presence_confidence=0.5,
                     min_tracking_confidence=0.5,
+                    output_face_blendshapes=True,
                 )
                 self._detector = mp_vision.FaceLandmarker.create_from_options(options)
                 self._available = True
-                log.info("VisualFeatureExtractor initialised (MediaPipe Tasks API).")
+                log.info("VisualFeatureExtractor initialised (MediaPipe Tasks API + Blendshapes).")
             except Exception as exc:
                 log.error("FaceLandmarker init failed: %s", exc)
                 log.warning("Visual features will be unavailable.")
@@ -210,11 +214,30 @@ class VisualFeatureExtractor:
             feat.annotated_frame = annotated
             return feat
 
+        # ── Blendshapes (AI Deep-Learning Blink & Eye Closure) ────
+        blendshapes = {}
+        if getattr(detection_result, "face_blendshapes", None) and len(detection_result.face_blendshapes) > 0:
+            for cat in detection_result.face_blendshapes[0]:
+                blendshapes[cat.category_name] = cat.score
+
+        feat.eye_blink_left = float(blendshapes.get("eyeBlinkLeft", 0.0))
+        feat.eye_blink_right = float(blendshapes.get("eyeBlinkRight", 0.0))
+        feat.blink_score = max(feat.eye_blink_left, feat.eye_blink_right)
+        jaw_open = float(blendshapes.get("jawOpen", 0.0))
+
         # ── EAR ───────────────────────────────────────────────
         feat.ear_left  = self._compute_ear(lm, LEFT_EYE)
         feat.ear_right = self._compute_ear(lm, RIGHT_EYE)
         feat.ear = (feat.ear_left + feat.ear_right) / 2.0
-        feat.eye_closed = feat.ear < self.ear_thresh
+
+        # Multi-Signal Eye Closure:
+        # 1. AI blendshape detects eye closed (neural net score >= 0.38) OR
+        # 2. Geometric EAR is below sensitive threshold (ear < 0.255)
+        feat.eye_closed = bool(
+            (feat.blink_score >= 0.38) or
+            ((feat.eye_blink_left + feat.eye_blink_right) / 2.0 >= 0.32) or
+            (feat.ear < max(self.ear_thresh, 0.255))
+        )
 
         if feat.eye_closed:
             self._ear_consec_count += 1
@@ -240,9 +263,10 @@ class VisualFeatureExtractor:
         feat.perclos = min(1.0, len(self._eye_closed_events) / max(1, self.perclos_win * 30))
         feat.blink_rate_per_min = len(self._blink_events) * (60.0 / self.blink_win)
 
-        # ── MAR ───────────────────────────────────────────────
+        # ── MAR & Yawn ────────────────────────────────────────
         feat.mar = self._compute_mar(lm)
-        if feat.mar > self.mar_thresh:
+        is_yawning = (feat.mar > self.mar_thresh) or (jaw_open >= 0.55)
+        if is_yawning:
             self._mar_consec_count += 1
         else:
             if self._mar_consec_count >= self.mar_consec:
@@ -250,6 +274,8 @@ class VisualFeatureExtractor:
                 feat.yawn_detected = True
             self._mar_consec_count = 0
         feat.yawn_count = self._yawn_count
+        if jaw_open >= 0.55:
+            feat.yawn_detected = True
 
         # ── Head Pose ─────────────────────────────────────────
         feat.pitch, feat.yaw, feat.roll = self._compute_head_pose(lm, w, h)

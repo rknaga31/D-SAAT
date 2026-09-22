@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>D-SAAT · Driver Safety AI-Assisted Telemetry</title>
-  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/style.css?v=2.2" />
 </head>
 <body>
 
@@ -78,6 +78,7 @@
         <div class="hud-info-strip">
           <span id="hudFps">30.0 FPS</span>
           <span id="hudPose">HEAD: P 0° / Y 0° / R 0°</span>
+          <span id="hudEyeStatus">EYES: OPEN</span>
           <span id="hudMeshStatus">AWAITING CAMERA</span>
         </div>
         <div id="camPromptOverlay" class="cam-prompt-overlay">
@@ -270,6 +271,6 @@
   <canvas id="clientCanvas" width="640" height="480" style="display:none;"></canvas>
 
   <!-- ── JavaScript Application ───────────────────────────────────── -->
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=2.2"></script>
 </body>
 </html>

@@ -141,6 +141,7 @@ const dom = {
   metricWatchHrv: document.getElementById('metricWatchHrv'),
   hudFps: document.getElementById('hudFps'),
   hudPose: document.getElementById('hudPose'),
+  hudEyeStatus: document.getElementById('hudEyeStatus'),
   hudMeshStatus: document.getElementById('hudMeshStatus'),
   radarCanvas: document.getElementById('radarChart'),
   telemetryCanvas: document.getElementById('telemetryChart')
@@ -374,9 +375,35 @@ function renderSnapshot(s) {
   let label = s.alert_label || 'SAFE';
   let riskScore = s.smoothed_score || 0.0;
 
-  // Immediate Eye Closure Check
+  // Immediate Eye Closure Check (Dual-Signal: AI Blendshapes + EAR)
   const earVal = s.ear || 0.0;
-  const isEyeClosed = !!(s.eye_closed || (earVal > 0.0 && earVal < 0.24));
+  const blinkScore = s.blink_score || Math.max(s.eye_blink_left || 0, s.eye_blink_right || 0);
+  const isEyeClosed = !!(s.eye_closed || (earVal > 0.0 && earVal < 0.255) || blinkScore >= 0.38);
+
+  if (dom.hudEyeStatus) {
+    if (!faceDetected && state.browserCamActive) {
+      dom.hudEyeStatus.textContent = 'EYES: NO FACE';
+      dom.hudEyeStatus.style.color = '#f59e0b';
+    } else if (isEyeClosed) {
+      dom.hudEyeStatus.textContent = `EYES: CLOSED ⚠️ (${earVal > 0 ? earVal.toFixed(2) : 'SHUT'})`;
+      dom.hudEyeStatus.style.color = '#ef4444';
+    } else {
+      dom.hudEyeStatus.textContent = `EYES: OPEN (EAR ${earVal.toFixed(2)})`;
+      dom.hudEyeStatus.style.color = 'var(--accent-cyan)';
+    }
+  }
+
+  const wrapper = document.querySelector('.video-hud-wrapper');
+  if (wrapper) {
+    if (isEyeClosed && faceDetected) {
+      wrapper.style.borderColor = '#ef4444';
+      wrapper.style.boxShadow = '0 0 28px rgba(239, 68, 68, 0.75)';
+    } else {
+      wrapper.style.borderColor = 'rgba(56, 189, 248, 0.2)';
+      wrapper.style.boxShadow = '0 0 20px rgba(0, 0, 0, 0.6)';
+    }
+  }
+
   if (isEyeClosed && faceDetected) {
     level = Math.max(level, 3);
     label = 'CRITICAL';

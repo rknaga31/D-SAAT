@@ -257,7 +257,14 @@ def sanitize_telemetry(raw: dict) -> dict:
 @app.get("/", response_class=HTMLResponse)
 def index_page():
     index_file = web_dir / "index.html"
-    return HTMLResponse(content=index_file.read_text(encoding="utf-8"))
+    return HTMLResponse(
+        content=index_file.read_text(encoding="utf-8"),
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        }
+    )
 
 
 @app.get("/api/telemetry")
