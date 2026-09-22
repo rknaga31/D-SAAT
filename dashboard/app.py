@@ -684,7 +684,7 @@ def render():
             {mode_badge}
           </div>
           <div class="vp-brand-subtitle">
-            Driver Somnolence, Alertness & Autonomic Telemetry · Real-Time Micro-Sleep Guard
+            Driver Safety AI-Assisted · Real-Time Multimodal Cockpit Telemetry
           </div>
         </div>
       </div>
