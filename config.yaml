@@ -1,0 +1,126 @@
+# VirtualPhysio-Driver Configuration
+# All tunable thresholds and parameters in one place
+
+# ─── Video Capture ──────────────────────────────────────────────
+video:
+  device_index: 0          # Webcam device index (0 = default)
+  width: 640
+  height: 480
+  fps: 30
+  buffer_size: 90          # Frames to keep in ring buffer (~3s)
+
+# ─── Audio Capture ──────────────────────────────────────────────
+audio:
+  sample_rate: 22050
+  channels: 1
+  block_duration: 0.5      # seconds per audio chunk
+  buffer_size: 60          # chunks in ring buffer (~30s)
+  device_index: null       # null = system default mic
+
+# ─── Visual Features ────────────────────────────────────────────
+visual:
+  # Eye Aspect Ratio
+  ear_threshold: 0.21          # Below this = eye closed
+  ear_consecutive_frames: 3    # Frames eye must stay closed
+  
+  # Mouth Aspect Ratio
+  mar_threshold: 0.65          # Above this = yawn
+  mar_consecutive_frames: 15   # Frames mouth must stay open
+  
+  # PERCLOS (% eye closure in window)
+  perclos_window_sec: 60       # Rolling window in seconds
+  perclos_threshold_warning: 0.15   # 15% → warning
+  perclos_threshold_danger: 0.30    # 30% → danger
+  
+  # Blink rate
+  blink_window_sec: 60
+  blink_rate_min_normal: 10   # blinks/min
+  blink_rate_max_normal: 20
+  
+  # Head pose (degrees)
+  head_yaw_threshold: 30      # Left/right tilt
+  head_pitch_threshold: 25    # Nodding
+  head_roll_threshold: 20     # Side tilt
+
+# ─── rPPG (Remote Photoplethysmography) ─────────────────────────
+rppg:
+  window_sec: 10              # Seconds of signal to analyze
+  min_hz: 0.75                # 45 BPM
+  max_hz: 3.0                 # 180 BPM
+  roi_scale: 0.4              # Fraction of face for ROI
+  normal_hr_min: 55
+  normal_hr_max: 100
+  low_hr_threshold: 50        # Below → alert
+  high_hr_threshold: 110      # Above → alert
+
+# ─── Audio Features ─────────────────────────────────────────────
+audio_features:
+  n_mfcc: 13
+  yawn_energy_threshold: 0.02
+  breathing_window_sec: 10
+  breathing_rate_normal_min: 12   # breaths/min
+  breathing_rate_normal_max: 20
+
+# ─── Multimodal Fusion ──────────────────────────────────────────
+fusion:
+  # Weights for each modality (must sum to 1.0)
+  weight_visual: 0.30
+  weight_rppg: 0.20
+  weight_audio: 0.25
+  weight_smartwatch: 0.25
+  
+  # Kalman-like smoothing
+  smoothing_alpha: 0.3         # EMA factor (lower = smoother)
+  
+  # Minimum data required to trust a modality (0–1)
+  visual_confidence_threshold: 0.5
+  rppg_confidence_threshold: 0.3
+  audio_confidence_threshold: 0.3
+  smartwatch_confidence_threshold: 0.4
+
+# ─── Smartwatch (Direct Physiological Modality) ─────────────────
+smartwatch:
+  enabled: true
+  provider: "fitbit"           # fitbit, google_fit, health_connect, or mock
+  poll_interval_sec: 5.0       # Smartwatch HR fetched every 5 seconds
+  simulation_mode: false       # Auto-simulates if credentials missing or device offline
+  
+  # Fitbit API (Path B)
+  fitbit_access_token: ""
+  fitbit_user_id: "-"
+  
+  # Google Fit API (Path A)
+  google_fit_token: ""
+  
+  # Health Connect HTTP Bridge (Path C)
+  health_connect_endpoint: "http://localhost:8080/health"
+  
+  # Physiological threshold limits for alerts
+  low_hr_threshold: 50.0
+  high_hr_threshold: 120.0
+  low_spo2_threshold: 92.0
+  high_stress_threshold: 80.0
+
+# ─── Alert Levels ───────────────────────────────────────────────
+alert:
+  level_0_max: 0.25     # SAFE (green)
+  level_1_max: 0.50     # WARNING (yellow)
+  level_2_max: 0.75     # DANGER (orange)
+  # Above 0.75        → CRITICAL (red)
+  
+  cooldown_sec: 3       # Minimum seconds between same-level alerts
+  tts_enabled: true     # Text-to-speech for critical alerts
+
+# ─── Dashboard ──────────────────────────────────────────────────
+dashboard:
+  refresh_rate_ms: 100       # Streamlit auto-refresh interval
+  chart_history_sec: 60      # How many seconds of history to show
+  show_landmarks: true
+  show_roi: true
+
+# ─── Logging ────────────────────────────────────────────────────
+logging:
+  level: INFO                # DEBUG, INFO, WARNING, ERROR
+  log_file: logs/vpd.log
+  max_bytes: 10485760        # 10 MB
+  backup_count: 3
