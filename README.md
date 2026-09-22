@@ -198,17 +198,26 @@ pip install -r requirements.txt
 
 ## 🚀 Quick Start
 
-### Option A: Complete Live Pipeline + Telemetry HUD (Recommended)
-Launch the background multimodal analysis engine in one terminal, and the Streamlit telemetry cockpit in another:
+### Option A: ⚡ Standalone Localhost Web Cockpit (No Streamlit Needed · Recommended)
+The fastest, simplest way to run D-SAAT locally in your browser. Single command launches the entire camera/mic pipeline and serves an ultra-low latency, dark cockpit web HUD on **`http://localhost:8000`**:
 
 ```bash
-# Terminal 1 — Start the real-time processing engine
-python main.py --headless
-
-# Terminal 2 — Launch the Obsidian Telemetry Dashboard
-streamlit run dashboard/app.py
+python web_app.py
 ```
-Open **http://localhost:8501** in your browser to inspect real-time telemetric feeds.
+*Or simply double-click [**`run_localhost.bat`**](run_localhost.bat).*
+
+- **Zero configuration**: Runs with standard Python (`FastAPI` + `Uvicorn`).
+- **Browser auto-launch**: Automatically opens `http://localhost:8000` in your default browser.
+- **In-browser audio alerts**: Plays synthesized acoustic warning chimes on fatigue detection.
+- **Hardware-free simulation**: Use `python web_app.py --demo` or toggle the **Demo Mode** button in the top navigation bar.
+
+---
+
+### Option B: Streamlit Cockpit Dashboard
+```bash
+python -m streamlit run dashboard/app.py
+```
+*Or double-click [**`run_dashboard.bat`**](run_dashboard.bat).*
 
 ---
 

@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>D-SAAT · Driver Safety AI-Assisted Telemetry</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+  <!-- ── Top Application Bar ──────────────────────────────────────── -->
+  <header class="app-header">
+    <div class="brand-section">
+      <div class="brand-icon">🚘</div>
+      <div>
+        <div class="brand-title">
+          <span>D-</span><span class="accent">SAAT</span>
+          <span id="modeBadge" class="capsule-badge capsule-live">LIVE FEED</span>
+        </div>
+        <div class="brand-subtitle">Driver Safety AI-Assisted · Edge Multimodal Cockpit</div>
+      </div>
+    </div>
+
+    <div class="header-controls">
+      <div id="sessionTime" class="capsule-badge" style="color:var(--text-muted);">
+        SESSION 00:00 · 30.0 FPS
+      </div>
+
+      <button id="btnDemoToggle" class="btn-toggle" title="Toggle Demo Mode">
+        <span>🎮</span>
+        <span id="btnDemoText">Demo Simulation</span>
+      </button>
+
+      <button id="btnAudioToggle" class="btn-toggle" title="Toggle Browser Audio Alerts">
+        <span id="audioIcon">🔔</span>
+        <span id="audioText">Alert Sound: ON</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── Alert Status Banner ──────────────────────────────────────── -->
+  <section id="alertBanner" class="alert-banner safe">
+    <div class="alert-main">
+      <span id="alertTag" class="alert-tag">LEVEL 0 · SAFE</span>
+      <span id="alertMessage" class="alert-message">Nominal driver alertness maintained. All systems nominal.</span>
+    </div>
+    <div style="font-family:var(--font-mono); font-size:1.1rem; font-weight:800;" id="bannerScore">
+      0.0%
+    </div>
+  </section>
+
+  <!-- ── Main Cockpit Grid ────────────────────────────────────────── -->
+  <main class="cockpit-grid">
+
+    <!-- ── Column 1: Video HUD ────────────────────────────────────── -->
+    <div class="card">
+      <div class="card-title">
+        <span>🎥 Real-Time Driver HUD</span>
+        <span id="faceTrackingBadge" style="color:var(--status-safe); font-size:0.75rem;">● Tracking Active</span>
+      </div>
+
+      <div class="video-hud-wrapper">
+        <img id="videoFeed" class="video-hud-feed" src="/api/video_feed" alt="Live Driver Video Stream" />
+        <div class="hud-reticle-tl"></div>
+        <div class="hud-reticle-tr"></div>
+        <div class="hud-reticle-bl"></div>
+        <div class="hud-reticle-br"></div>
+        <div class="hud-info-strip">
+          <span id="hudFps">30.0 FPS</span>
+          <span id="hudPose">HEAD: P 0° / Y 0° / R 0°</span>
+          <span id="hudMeshStatus">468-MESH ACTIVE</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Column 2: Composite Risk & Multimodal Fusion ─────────── -->
+    <div class="card">
+      <div class="card-title">
+        <span>🎯 Composite Risk Index</span>
+        <span style="color:var(--accent-cyan); font-size:0.75rem;">Adaptive Fusion</span>
+      </div>
+
+      <div class="risk-center-box">
+        <div class="gauge-svg-container">
+          <svg class="gauge-svg" viewBox="0 0 120 120">
+            <circle class="gauge-bg-circle" cx="60" cy="60" r="50"></circle>
+            <circle id="gaugeFill" class="gauge-fill-circle" cx="60" cy="60" r="50"
+                    stroke="#10b981" stroke-dasharray="314.15" stroke-dashoffset="314.15"></circle>
+          </svg>
+          <div class="gauge-inner-label">
+            <div id="gaugeScore" class="gauge-score-num" style="color:#10b981;">0%</div>
+            <div id="gaugeStatus" class="gauge-score-unit">ALERT</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modality Bars -->
+      <div class="modality-bars">
+        <div class="bar-row">
+          <div class="bar-label-group">
+            <span class="bar-name">👁️ Visual Ocular Strain</span>
+            <span id="valVisual" class="bar-val">0.0%</span>
+          </div>
+          <div class="progress-track">
+            <div id="barVisual" class="progress-fill" style="width:0%; background:#38bdf8;"></div>
+          </div>
+        </div>
+
+        <div class="bar-row">
+          <div class="bar-label-group">
+            <span class="bar-name">🩺 Contactless rPPG Pulse</span>
+            <span id="valRppg" class="bar-val">0.0%</span>
+          </div>
+          <div class="progress-track">
+            <div id="barRppg" class="progress-fill" style="width:0%; background:#ec4899;"></div>
+          </div>
+        </div>
+
+        <div class="bar-row">
+          <div class="bar-label-group">
+            <span class="bar-name">🎙️ Ambient Audio Fatigue</span>
+            <span id="valAudio" class="bar-val">0.0%</span>
+          </div>
+          <div class="progress-track">
+            <div id="barAudio" class="progress-fill" style="width:0%; background:#f59e0b;"></div>
+          </div>
+        </div>
+
+        <div class="bar-row">
+          <div class="bar-label-group">
+            <span class="bar-name">⌚ Smartwatch PPG Vitals</span>
+            <span id="valSmartwatch" class="bar-val">0.0%</span>
+          </div>
+          <div class="progress-track">
+            <div id="barSmartwatch" class="progress-fill" style="width:0%; background:#a855f7;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4-Axis Radar Chart -->
+      <div class="radar-canvas-container">
+        <canvas id="radarChart" width="220" height="180"></canvas>
+      </div>
+    </div>
+
+    <!-- ── Column 3: Driver Physiological Telemetry ─────────────── -->
+    <div class="metrics-stack">
+      
+      <!-- Ocular & Face Card -->
+      <div class="card">
+        <div class="card-title">
+          <span>👁️ Ocular & Facial Dynamics</span>
+        </div>
+        <div class="metric-grid-2">
+          <div class="metric-item">
+            <div class="metric-lbl">Eye Aspect Ratio</div>
+            <div id="metricEar" class="metric-num">0.28</div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-lbl">PERCLOS (60s)</div>
+            <div id="metricPerclos" class="metric-num">0.0 <span class="metric-unit">%</span></div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-lbl">Blink Frequency</div>
+            <div id="metricBlink" class="metric-num">16 <span class="metric-unit">/min</span></div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-lbl">Mouth Aspect Ratio</div>
+            <div id="metricMar" class="metric-num">0.14</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Contactless rPPG Card -->
+      <div class="card">
+        <div class="card-title">
+          <span>🩺 Contactless Hemodynamics (rPPG)</span>
+          <span id="metricRppgQuality" style="font-size:0.75rem; color:var(--status-safe);">Good 94%</span>
+        </div>
+        <div class="metric-grid-2">
+          <div class="metric-item">
+            <div class="metric-lbl">Camera Pulse</div>
+            <div id="metricRppgHr" class="metric-num">72 <span class="metric-unit">BPM</span></div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-lbl">HRV (RMSSD)</div>
+            <div id="metricRppgHrv" class="metric-num">38 <span class="metric-unit">ms</span></div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-lbl">Respiration Rate</div>
+            <div id="metricResp" class="metric-num">16 <span class="metric-unit">br/min</span></div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-lbl">Cross-Modal Check</div>
+            <div id="metricCrossVal" class="metric-num" style="font-size:1.0rem; color:var(--status-safe);">AGREE</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Smartwatch Card -->
+      <div class="card watch-card-highlight">
+        <div class="card-title">
+          <span class="watch-badge">⌚ Wearable PPG Telemetry</span>
+          <span id="metricWatchConn" style="color:var(--accent-purple); font-size:0.75rem;">Connected</span>
+        </div>
+        <div class="metric-grid-2">
+          <div class="metric-item">
+            <div class="metric-lbl">Wrist Pulse</div>
+            <div id="metricWatchHr" class="metric-num" style="color:#c084fc;">71 <span class="metric-unit">BPM</span></div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-lbl">SpO2 Saturation</div>
+            <div id="metricWatchSpo2" class="metric-num" style="color:#c084fc;">98.5 <span class="metric-unit">%</span></div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-lbl">Stress Index</div>
+            <div id="metricWatchStress" class="metric-num" style="color:#c084fc;">22 <span class="metric-unit">/100</span></div>
+          </div>
+          <div class="metric-item">
+            <div class="metric-lbl">Wearable HRV</div>
+            <div id="metricWatchHrv" class="metric-num" style="color:#c084fc;">42 <span class="metric-unit">ms</span></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- ── Bottom Rolling Telemetry ─────────────────────────────────── -->
+  <section class="bottom-telemetry-section">
+    <div class="card">
+      <div class="card-title">
+        <span>📈 60-Second Real-Time Physiological & Risk Telemetry</span>
+        <div class="chart-legend">
+          <div class="legend-item"><span class="legend-color-dot" style="background:#ec4899;"></span> rPPG HR</div>
+          <div class="legend-item"><span class="legend-color-dot" style="background:#a855f7;"></span> Smartwatch HR</div>
+          <div class="legend-item"><span class="legend-color-dot" style="background:#38bdf8;"></span> Drowsiness Risk %</div>
+        </div>
+      </div>
+      <div class="chart-canvas-wrapper">
+        <canvas id="telemetryChart"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── JavaScript Application ───────────────────────────────────── -->
+  <script src="/static/app.js"></script>
+</body>
+</html>
