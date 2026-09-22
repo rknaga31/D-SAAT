@@ -1,5 +1,5 @@
 """
-VirtualPhysio-Driver — prediction package
+D-SAAT — prediction package
 """
 from .risk_scorer import RiskScorer, RiskAssessment, LEVEL_SAFE, LEVEL_WARNING, LEVEL_DANGER, LEVEL_CRITICAL
 

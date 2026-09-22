@@ -67,4 +67,4 @@ def configure_from_config(cfg: dict) -> None:
         max_bytes=log_cfg.get("max_bytes", 10_485_760),
         backup_count=log_cfg.get("backup_count", 3),
     )
-    root.info("VirtualPhysio-Driver logging initialised.")
+    root.info("D-SAAT logging initialised.")

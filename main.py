@@ -1,5 +1,5 @@
 """
-VirtualPhysio-Driver — Main Pipeline Entry Point
+D-SAAT — Main Pipeline Entry Point
 
 Orchestrates all system threads:
   • VideoCapture    → frame buffer
@@ -239,7 +239,7 @@ def _handle_shutdown(sig, frame):
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description="VirtualPhysio-Driver Pipeline")
+    parser = argparse.ArgumentParser(description="D-SAAT Pipeline")
     parser.add_argument("--config", default="config.yaml", help="Path to config.yaml")
     parser.add_argument("--no-audio", action="store_true", help="Disable audio capture")
     parser.add_argument("--headless", action="store_true",
@@ -278,7 +278,7 @@ def main():
     proc_thread.start()
 
     log.info("=" * 60)
-    log.info("  VirtualPhysio-Driver is RUNNING")
+    log.info("  D-SAAT is RUNNING")
     log.info("  Dashboard: streamlit run dashboard/app.py")
     log.info("  Press Ctrl+C to stop.")
     log.info("=" * 60)
@@ -308,7 +308,7 @@ def main():
                                 f"ALERT: {label}  |  Score: {score:.3f}",
                                 (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.8,
                                 (255, 255, 255), 2)
-                    cv2.imshow("VirtualPhysio-Driver", frame)
+                    cv2.imshow("D-SAAT", frame)
 
             key = cv2.waitKey(1) & 0xFF
             if key == ord("q"):
@@ -324,7 +324,7 @@ def main():
     if audio_cap:
         audio_cap.stop()
     proc_thread.join(timeout=5.0)
-    log.info("VirtualPhysio-Driver shut down cleanly.")
+    log.info("D-SAAT shut down cleanly.")
 
 
 if __name__ == "__main__":

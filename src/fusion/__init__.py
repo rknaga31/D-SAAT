@@ -1,5 +1,5 @@
 """
-VirtualPhysio-Driver — fusion package
+D-SAAT — fusion package
 """
 from .multimodal_fusion import MultimodalFusion, FusedState
 from .cross_validation import (

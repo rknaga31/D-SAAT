@@ -1,4 +1,6 @@
-# 🚗 VirtualPhysio-Driver
+# 🚗 D-SAAT
+
+> **Driver Somnolence, Alertness & Autonomic Telemetry**
 
 <div align="center">
 
@@ -26,7 +28,7 @@
 
 ## 📌 Overview
 
-Driver fatigue and drowsiness remain leading contributors to worldwide vehicular collisions. **VirtualPhysio-Driver** provides a modular, low-latency, multimodal telemetric pipeline that continuously tracks driver alertness, cognitive workload, and physiological strain in real time.
+Driver fatigue and drowsiness remain leading contributors to worldwide vehicular collisions. **D-SAAT** (Driver Somnolence, Alertness & Autonomic Telemetry) provides a modular, low-latency, multimodal telemetric pipeline that continuously tracks driver alertness, cognitive workload, and physiological strain in real time.
 
 By coupling **contactless computer vision** (MediaPipe 468-point facial mesh + CHROM rPPG hemodynamics), **ambient acoustic signal processing** (breathing rate & yawning acoustic energy), and **wearable smartwatch telemetry** (PPG pulse, SpO2, stress, and HRV), the system achieves robust, fault-tolerant drowsiness detection that dramatically outperforms single-modality solutions.
 
@@ -111,8 +113,8 @@ VisualFeatureExtractor        RPPGExtractor         AudioFeatureExtractor       
 
 ### Step 1: Clone the Repository
 ```bash
-git clone https://github.com/rknaga31/virtualphysio-driver.git
-cd virtualphysio-driver
+git clone https://github.com/rknaga31/D-SAAT.git
+cd D-SAAT
 ```
 
 ### Step 2: Set Up Virtual Environment (Recommended)
@@ -308,7 +310,7 @@ tests/test_smartwatch.py ...................                               [100%
 ## 📁 Repository Structure
 
 ```
-virtualphysio-driver/
+D-SAAT/
 ├── .gitignore                   # Clean ignore configuration
 ├── LICENSE                      # MIT Open-Source License
 ├── README.md                    # Comprehensive technical documentation

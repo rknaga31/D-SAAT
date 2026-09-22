@@ -1,5 +1,5 @@
 """
-VirtualPhysio-Driver — alert package
+D-SAAT — alert package
 """
 from .alert_manager import AlertManager
 

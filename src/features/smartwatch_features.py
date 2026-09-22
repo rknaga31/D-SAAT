@@ -238,7 +238,7 @@ def _fetch_fitbit_data(token: str, user_id: str = "-") -> Dict[str, Any]:
         headers={
             "Authorization": f"Bearer {token}",
             "Accept": "application/json",
-            "User-Agent": "VirtualPhysio-Driver/1.0"
+            "User-Agent": "D-SAAT/1.0"
         }
     )
 

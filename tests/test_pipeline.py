@@ -1,5 +1,5 @@
 """
-Smoke tests for the VirtualPhysio-Driver pipeline.
+Smoke tests for the D-SAAT pipeline.
 
 Tests that all core modules can be imported and instantiated with default config,
 and that key functions produce expected output shapes/types.

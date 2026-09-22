@@ -1,5 +1,5 @@
 """
-VirtualPhysio-Driver — features package
+D-SAAT — features package
 """
 from .visual_features import VisualFeatureExtractor, VisualFeatures
 from .rppg_features import RPPGExtractor, RPPGFeatures

@@ -1,5 +1,5 @@
 """
-VirtualPhysio-Driver — Clean Telemetry & Monitoring Dashboard
+D-SAAT — Clean Telemetry & Monitoring Dashboard
 
 Reads from the SharedState populated by main.py's ProcessingPipeline
 and renders a real-time, clean multimodal driver monitoring HUD.
@@ -37,7 +37,7 @@ except Exception:
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="VirtualPhysio-Driver · Cockpit Telemetry",
+    page_title="D-SAAT · Cockpit Telemetry",
     page_icon="🚘",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -679,12 +679,12 @@ def render():
         <div class="vp-brand-icon">🚘</div>
         <div>
           <div class="vp-brand-title">
-            <span>VirtualPhysio</span>
-            <span style="color:#38bdf8; font-weight:400;">Driver</span>
+            <span>D-</span>
+            <span style="color:#38bdf8; font-weight:700;">SAAT</span>
             {mode_badge}
           </div>
           <div class="vp-brand-subtitle">
-            Multimodal Edge Physiological Telemetry · Real-Time Micro-Sleep Guard
+            Driver Somnolence, Alertness & Autonomic Telemetry · Real-Time Micro-Sleep Guard
           </div>
         </div>
       </div>

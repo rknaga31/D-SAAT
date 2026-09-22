@@ -1,5 +1,5 @@
-# VirtualPhysio-Driver Configuration
-# All tunable thresholds and parameters in one place
+# D-SAAT Configuration
+# Multimodal Driver Drowsiness & Physiological Monitoring System
 
 # ─── Video Capture ──────────────────────────────────────────────
 video:

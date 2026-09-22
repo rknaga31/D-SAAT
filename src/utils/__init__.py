@@ -1,5 +1,5 @@
 """
-VirtualPhysio-Driver — utils package
+D-SAAT — utils package
 """
 from .buffer import ThreadSafeBuffer, SharedState, TimestampedItem
 from .logger import get_logger, configure_from_config
