@@ -232,29 +232,43 @@ function updateModeDisplay() {
 async function startBrowserWebcam() {
   initAudio();
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    alert("Camera API requires HTTPS or localhost. Please ensure you are viewing this site over HTTPS.");
+    alert("Camera API requires HTTPS or localhost. Please ensure your browser URL starts with https://");
     return;
   }
 
+  const constraints = {
+    audio: false,
+    video: {
+      facingMode: 'user',
+      width: { ideal: 640 },
+      height: { ideal: 480 }
+    }
+  };
+
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        width: { ideal: 640 },
-        height: { ideal: 480 },
-        facingMode: 'user'
-      },
-      audio: false
-    });
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (constrainErr) {
+      console.warn("Retrying with universal mobile constraints:", constrainErr);
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+    }
 
     state.browserCamStream = stream;
     dom.clientVideo.srcObject = stream;
-    await dom.clientVideo.play();
+    dom.clientVideo.style.display = 'block';
+    if (dom.videoFeed) dom.videoFeed.style.display = 'none';
 
-    // Ensure video dimensions are initialized before streaming frames
+    try {
+      await dom.clientVideo.play();
+    } catch (playErr) {
+      console.warn("Video play warning:", playErr);
+    }
+
+    // Wait until video has real dimensions on mobile/desktop
     await new Promise((resolve) => {
-      if (dom.clientVideo.videoWidth > 0 && dom.clientVideo.readyState >= 2) {
-        return resolve();
-      }
+      if (dom.clientVideo.videoWidth > 0) return resolve();
+      dom.clientVideo.onloadedmetadata = () => resolve();
       dom.clientVideo.onloadeddata = () => resolve();
       setTimeout(resolve, 800);
     });
@@ -263,11 +277,11 @@ async function startBrowserWebcam() {
     state.demoMode = false;
     updateModeDisplay();
 
-    // Stream frames to server every 100ms (~10 FPS)
-    state.browserCamInterval = setInterval(sendClientFrame, 100);
+    // Stream lightweight frames to server every 120ms (~8 FPS AI processing)
+    state.browserCamInterval = setInterval(sendClientFrame, 120);
   } catch (err) {
     console.error("Camera access error:", err);
-    alert("Could not access camera: " + (err.message || err.name) + "\n\nPlease ensure camera permission is granted in your browser address bar.");
+    alert("Could not access camera: " + (err.message || err.name) + "\n\nPlease ensure you tapped 'Allow' for camera permissions.");
     stopBrowserWebcam();
   }
 }
@@ -284,8 +298,10 @@ function stopBrowserWebcam() {
   }
   if (dom.clientVideo) {
     dom.clientVideo.srcObject = null;
+    dom.clientVideo.style.display = 'none';
   }
   if (dom.videoFeed) {
+    dom.videoFeed.style.display = 'block';
     dom.videoFeed.src = '/api/video_feed?t=' + Date.now();
   }
   updateModeDisplay();
@@ -294,17 +310,21 @@ function stopBrowserWebcam() {
 async function sendClientFrame() {
   if (!state.browserCamActive || state.isSendingFrame) return;
   const video = dom.clientVideo;
-  if (!video || video.videoWidth === 0 || video.readyState < 2) return;
+  if (!video || video.videoWidth === 0) return;
 
   const canvas = dom.clientCanvas;
   const ctx = canvas.getContext('2d');
-  const targetW = Math.min(640, video.videoWidth || 640);
-  const targetH = Math.round(targetW * ((video.videoHeight || 480) / (video.videoWidth || 640)));
+  
+  // Mobile-safe lightweight frame (max 480 width for fast cellular upload)
+  const srcW = video.videoWidth;
+  const srcH = video.videoHeight;
+  const targetW = Math.min(480, srcW);
+  const targetH = Math.round(targetW * (srcH / srcW));
   canvas.width = targetW;
   canvas.height = targetH;
   ctx.drawImage(video, 0, 0, targetW, targetH);
 
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.60);
   state.isSendingFrame = true;
 
   try {
@@ -316,9 +336,6 @@ async function sendClientFrame() {
 
     if (res.ok) {
       const data = await res.json();
-      if (data.annotated_frame && dom.videoFeed) {
-        dom.videoFeed.src = data.annotated_frame;
-      }
       if (data.telemetry) {
         renderSnapshot(data.telemetry);
       }

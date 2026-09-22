@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>D-SAAT · Driver Safety AI-Assisted Telemetry</title>
-  <link rel="stylesheet" href="/static/style.css?v=2.2" />
+  <link rel="stylesheet" href="/static/style.css?v=2.5" />
 </head>
 <body>
 
@@ -71,6 +71,8 @@
 
       <div class="video-hud-wrapper">
         <img id="videoFeed" class="video-hud-feed" src="/api/video_feed" alt="Live Driver Video Stream" />
+        <video id="clientVideo" class="video-hud-feed" autoplay playsinline webkit-playsinline muted style="display:none;"></video>
+        <canvas id="clientCanvas" width="480" height="360" style="display:none;"></canvas>
         <div class="hud-reticle-tl"></div>
         <div class="hud-reticle-tr"></div>
         <div class="hud-reticle-bl"></div>
@@ -83,9 +85,9 @@
         </div>
         <div id="camPromptOverlay" class="cam-prompt-overlay">
           <div class="cam-prompt-content">
-            <div class="cam-prompt-icon">📷</div>
-            <div class="cam-prompt-title">Driver Camera Inactive</div>
-            <div class="cam-prompt-desc">Click below to enable your camera for live eye tracking & drowsiness detection</div>
+            <div class="cam-prompt-icon">📱</div>
+            <div class="cam-prompt-title">Driver Camera Required</div>
+            <div class="cam-prompt-desc">Tap below to allow camera access for real-time mobile eye tracking & drowsiness detection</div>
             <button id="btnOverlayStartCam" class="btn-overlay-start">▶ Start Camera Tracking</button>
           </div>
         </div>
@@ -266,11 +268,7 @@
     </div>
   </section>
 
-  <!-- ── Hidden Browser Webcam Capture Elements ─────────────────── -->
-  <video id="clientVideo" autoplay playsinline muted style="position:fixed; top:-9999px; left:-9999px; width:640px; height:480px; opacity:0; pointer-events:none;"></video>
-  <canvas id="clientCanvas" width="640" height="480" style="display:none;"></canvas>
-
   <!-- ── JavaScript Application ───────────────────────────────────── -->
-  <script src="/static/app.js?v=2.2"></script>
+  <script src="/static/app.js?v=2.5"></script>
 </body>
 </html>
