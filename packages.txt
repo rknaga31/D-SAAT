@@ -1,0 +1,6 @@
+libgl1
+libglib2.0-0
+portaudio19-dev
+libsndfile1
+espeak
+ffmpeg

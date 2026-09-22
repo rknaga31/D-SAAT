@@ -10,6 +10,7 @@
 [![Computer Vision](https://img.shields.io/badge/Vision-OpenCV%20%7C%20MediaPipe-green.svg?logo=opencv&logoColor=white)](https://mediapipe.dev)
 [![Tests](https://img.shields.io/badge/Tests-49%2F49%20Passing-brightgreen.svg?logo=pytest&logoColor=white)](tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Deploy to Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://share.streamlit.io/deploy?repository=rknaga31/D-SAAT&branch=main&mainModule=dashboard/app.py)
 [![Architecture](https://img.shields.io/badge/Architecture-Multimodal%204--Stream%20Fusion-purple.svg)]()
 
 **A real-time, software-first multimodal driver drowsiness, fatigue, and physiological monitoring system.**  
@@ -231,6 +232,21 @@ python main.py
 
 ---
 
+### Option D: 🌐 1-Click Free Web Deployment (Streamlit Community Cloud)
+Deploy D-SAAT publicly on the web for free with automatic CI/CD from GitHub:
+
+[![Deploy to Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://share.streamlit.io/deploy?repository=rknaga31/D-SAAT&branch=main&mainModule=dashboard/app.py)
+
+1. Click the **Deploy to Streamlit** badge above (or navigate to **[share.streamlit.io](https://share.streamlit.io)**).
+2. Sign in with your GitHub account (`rknaga31`).
+3. Set the deployment fields:
+   - **Repository**: `rknaga31/D-SAAT`
+   - **Branch**: `main`
+   - **Main file path**: `dashboard/app.py`
+4. Click **Deploy!** — Streamlit will automatically read [`packages.txt`](packages.txt) and [`requirements.txt`](requirements.txt), spinning up a public URL (e.g. `https://d-saat.streamlit.app`) with full interactive telemetry simulation and HUD controls.
+
+---
+
 ## 🖥️ Obsidian Telemetry Cockpit
 
 The web dashboard is engineered with a custom **Obsidian / Slate dark telemetry theme** ([`.streamlit/config.toml`](.streamlit/config.toml)) crafted for vehicular cockpits and telemetry rooms:
@@ -365,6 +381,7 @@ D-SAAT/
 ├── config.yaml                  # System-wide configuration & threshold tuning
 ├── conftest.py                  # Pytest fixtures and environment setup
 ├── main.py                      # Core multithreaded pipeline orchestrator
+├── packages.txt                 # Linux system dependencies for cloud deployment
 ├── requirements.txt             # Locked dependencies & test requirements
 │
 ├── .streamlit/
