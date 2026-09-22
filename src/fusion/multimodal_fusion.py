@@ -55,6 +55,7 @@ class FusedState:
 
     # ── Component details for dashboard ──────────────────────────
     ear: float = 0.0
+    eye_closed: bool = False
     mar: float = 0.0
     perclos: float = 0.0
     blink_rate: float = 0.0
@@ -98,7 +99,7 @@ class MultimodalFusion:
 
         # Visual feature thresholds from config
         vc = cfg.get("visual", {})
-        self.ear_thresh: float  = vc.get("ear_threshold", 0.21)
+        self.ear_thresh: float  = vc.get("ear_threshold", 0.24)
         self.mar_thresh: float  = vc.get("mar_threshold", 0.65)
         self.perclos_warn: float = vc.get("perclos_threshold_warning", 0.15)
         self.perclos_dng: float  = vc.get("perclos_threshold_danger", 0.30)
@@ -144,6 +145,7 @@ class MultimodalFusion:
             vis_conf = visual.confidence
             state.visual_score = self._visual_subscore(visual)
             state.ear = visual.ear
+            state.eye_closed = visual.eye_closed
             state.mar = visual.mar
             state.perclos = visual.perclos
             state.blink_rate = visual.blink_rate_per_min
@@ -168,34 +170,31 @@ class MultimodalFusion:
             state.breathing_rate = audio.breathing_rate_bpm
             state.yawn_score = audio.yawn_score
 
-        # ── Smartwatch sub-score (4th Modality) ─────────────────
+        # ── Smartwatch (4th Modality) ──────────────────────────
         watch_conf = 0.0
-        watch_hr = 0.0
         watch_connected = False
-        if smartwatch is not None:
-            watch_connected = smartwatch.is_connected
-            watch_conf = smartwatch.confidence if watch_connected else 0.0
-            state.smartwatch_connected = watch_connected
+        if smartwatch is not None and smartwatch.is_connected:
+            watch_connected = True
+            watch_conf = smartwatch.confidence
+            state.smartwatch_score = self._smartwatch_subscore(smartwatch)
             state.smartwatch_hr = smartwatch.heart_rate_bpm
             state.smartwatch_spo2 = smartwatch.spo2
             state.smartwatch_stress = smartwatch.stress_level
             state.smartwatch_hrv = smartwatch.hrv_rmssd
-            watch_hr = smartwatch.heart_rate_bpm
+            state.smartwatch_connected = True
 
-            if watch_connected and watch_conf > 0.1:
-                state.smartwatch_score = self._smartwatch_subscore(smartwatch)
-
-        # ── Cross-Validation of HR (rPPG vs Smartwatch) ─────────
+        # ── Cross-Modal Validation: rPPG vs Smartwatch ────────
         cv_res = cross_validate_heart_rate(
             rppg_hr=rppg_hr,
             rppg_quality=rppg_conf,
-            watch_hr=watch_hr,
+            watch_hr=state.smartwatch_hr,
             watch_connected=watch_connected,
             watch_confidence=watch_conf,
         )
         state.cross_validation_status = cv_res.status
         state.cross_validation_diff = cv_res.diff_bpm
         state.cross_validation_confidence = cv_res.confidence
+
         if cv_res.consensus_hr > 0.0:
             state.heart_rate = cv_res.consensus_hr
 
@@ -244,8 +243,12 @@ class MultimodalFusion:
             self._smoothed = state.fused_score
             self._first = False
         else:
-            self._smoothed = (self.alpha * state.fused_score +
-                              (1 - self.alpha) * self._smoothed)
+            # Acute eye closure overrides normal EMA lag
+            if visual is not None and (visual.eye_closed or (0 < visual.ear < self.ear_thresh)):
+                self._smoothed = max(self._smoothed, state.fused_score, 0.70)
+            else:
+                self._smoothed = (self.alpha * state.fused_score +
+                                  (1 - self.alpha) * self._smoothed)
 
         state.smoothed_score = float(np.clip(self._smoothed, 0.0, 1.0))
         return state
@@ -256,7 +259,17 @@ class MultimodalFusion:
         """Map visual features to a [0, 1] drowsiness score."""
         score = 0.0
 
-        # PERCLOS — most reliable drowsiness indicator
+        # Immediate eye closure & microsleep (acute driver risk)
+        if v.eye_closed:
+            score += 0.85
+        elif v.ear < self.ear_thresh:
+            score += 0.70
+        elif v.ear < self.ear_thresh * 1.15:
+            score += 0.35
+        elif v.ear < self.ear_thresh * 1.30:
+            score += 0.15
+
+        # PERCLOS — cumulative eye closure over window
         if v.perclos > self.perclos_dng:
             score += 0.35
         elif v.perclos > self.perclos_warn:

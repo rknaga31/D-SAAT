@@ -20,8 +20,8 @@ audio:
 # ─── Visual Features ────────────────────────────────────────────
 visual:
   # Eye Aspect Ratio
-  ear_threshold: 0.21          # Below this = eye closed
-  ear_consecutive_frames: 3    # Frames eye must stay closed
+  ear_threshold: 0.24          # Below this = eye closed
+  ear_consecutive_frames: 2    # Frames eye must stay closed
   
   # Mouth Aspect Ratio
   mar_threshold: 0.65          # Above this = yawn

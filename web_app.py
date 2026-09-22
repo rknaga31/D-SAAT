@@ -11,6 +11,7 @@ Usage:
   python web_app.py --demo
 """
 
+import os
 import sys
 import time
 import math
@@ -216,6 +217,25 @@ class WebPipelineWorker:
 worker: Optional[WebPipelineWorker] = None
 
 
+def sanitize_telemetry(raw: dict) -> dict:
+    """Sanitizes shared state dictionary into JSON-serializable primitives."""
+    clean = {}
+    for k, v in raw.items():
+        if k in ("frame_jpg", "rppg_filtered"):
+            continue
+        if isinstance(v, (np.floating, float)):
+            clean[k] = None if (math.isnan(v) or math.isinf(v)) else round(float(v), 4)
+        elif isinstance(v, (np.integer, int)):
+            clean[k] = int(v)
+        elif isinstance(v, (np.bool_, bool)):
+            clean[k] = bool(v)
+        elif isinstance(v, (np.ndarray, bytes)):
+            continue
+        else:
+            clean[k] = v
+    return clean
+
+
 # ── HTTP API Routes ───────────────────────────────────────────────────────────
 @app.get("/", response_class=HTMLResponse)
 def index_page():
@@ -233,8 +253,9 @@ def get_telemetry():
     if not snap or not snap.get("pipeline_running"):
         return JSONResponse(get_demo_snapshot())
 
-    snap["demo_mode"] = False
-    return JSONResponse(snap)
+    clean_snap = sanitize_telemetry(snap)
+    clean_snap["demo_mode"] = False
+    return JSONResponse(clean_snap)
 
 
 @app.post("/api/demo_mode")
@@ -285,14 +306,16 @@ def launch_server(host: str = "127.0.0.1", port: int = 8000, demo: bool = False,
         worker = WebPipelineWorker(cfg)
         worker.start(no_audio=no_audio)
 
-    url = f"http://localhost:{port}"
+    url = f"http://{host}:{port}" if host != "0.0.0.0" else f"http://localhost:{port}"
     log.info("=" * 60)
-    log.info(f"  D-SAAT Localhost Cockpit is LIVE at: {url}")
+    log.info(f"  D-SAAT Cockpit is LIVE at: {url}")
     log.info(f"  Mode: {'DEMO SIMULATION' if _DEMO_MODE else 'HARDWARE CAMERA & SENSORS'}")
     log.info("  Press Ctrl+C to stop.")
     log.info("=" * 60)
 
-    if open_browser:
+    # Don't pop up browser if headless or explicitly disabled
+    is_headless = os.environ.get("HEADLESS", "0") == "1"
+    if open_browser and not is_headless:
         threading.Timer(1.2, lambda: webbrowser.open(url)).start()
 
     try:
@@ -303,13 +326,16 @@ def launch_server(host: str = "127.0.0.1", port: int = 8000, demo: bool = False,
         _shutdown.set()
         if worker:
             worker.stop()
-        log.info("D-SAAT localhost server stopped cleanly.")
+        log.info("D-SAAT server stopped cleanly.")
 
 
 if __name__ == "__main__":
+    default_host = os.environ.get("HOST", "127.0.0.1")
+    default_port = int(os.environ.get("PORT", 8000))
+
     parser = argparse.ArgumentParser(description="D-SAAT Localhost Web Server")
-    parser.add_argument("--host", default="127.0.0.1", help="Host address (default: 127.0.0.1)")
-    parser.add_argument("--port", type=int, default=8000, help="Port (default: 8000)")
+    parser.add_argument("--host", default=default_host, help=f"Host address (default: {default_host})")
+    parser.add_argument("--port", type=int, default=default_port, help=f"Port (default: {default_port})")
     parser.add_argument("--demo", action="store_true", help="Start directly in demo mode")
     parser.add_argument("--no-audio", action="store_true", help="Disable audio capture")
     parser.add_argument("--no-browser", action="store_true", help="Do not open browser automatically")

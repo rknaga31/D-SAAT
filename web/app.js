@@ -30,7 +30,9 @@ function initAudio() {
 }
 
 function playChime(level) {
-  if (state.audioMuted || !audioCtx) return;
+  if (state.audioMuted) return;
+  initAudio();
+  if (!audioCtx) return;
 
   const now = audioCtx.currentTime;
   const osc = audioCtx.createOscillator();
@@ -44,7 +46,7 @@ function playChime(level) {
     osc.type = 'sine';
     osc.frequency.setValueAtTime(880, now);
     osc.frequency.exponentialRampToValueAtTime(1174.66, now + 0.15);
-    gain.gain.setValueAtTime(0.12, now);
+    gain.gain.setValueAtTime(0.2, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
     osc.start(now);
     osc.stop(now + 0.36);
@@ -53,20 +55,37 @@ function playChime(level) {
     osc.type = 'triangle';
     osc.frequency.setValueAtTime(659.25, now);
     osc.frequency.setValueAtTime(880, now + 0.12);
-    gain.gain.setValueAtTime(0.2, now);
+    gain.gain.setValueAtTime(0.3, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
     osc.start(now);
     osc.stop(now + 0.41);
   } else if (level >= 3) {
-    // Critical alert beep
+    // Critical alert alarm
     osc.type = 'sawtooth';
     osc.frequency.setValueAtTime(987.77, now);
     osc.frequency.setValueAtTime(493.88, now + 0.1);
-    gain.gain.setValueAtTime(0.25, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+    gain.gain.setValueAtTime(0.35, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
     osc.start(now);
-    osc.stop(now + 0.31);
+    osc.stop(now + 0.36);
   }
+}
+
+function playTestChime() {
+  initAudio();
+  if (!audioCtx) return;
+  const now = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(587.33, now);
+  osc.frequency.exponentialRampToValueAtTime(880, now + 0.15);
+  gain.gain.setValueAtTime(0.3, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+  osc.start(now);
+  osc.stop(now + 0.46);
 }
 
 // ── DOM References ──────────────────────────────────────────────────────────
@@ -75,6 +94,7 @@ const dom = {
   btnDemoToggle: document.getElementById('btnDemoToggle'),
   btnDemoText: document.getElementById('btnDemoText'),
   btnAudioToggle: document.getElementById('btnAudioToggle'),
+  btnTestAudio: document.getElementById('btnTestAudio'),
   audioIcon: document.getElementById('audioIcon'),
   audioText: document.getElementById('audioText'),
   sessionTime: document.getElementById('sessionTime'),
@@ -85,6 +105,7 @@ const dom = {
   gaugeFill: document.getElementById('gaugeFill'),
   gaugeScore: document.getElementById('gaugeScore'),
   gaugeStatus: document.getElementById('gaugeStatus'),
+  gaugeSubtext: document.getElementById('gaugeSubtext'),
   valVisual: document.getElementById('valVisual'),
   barVisual: document.getElementById('barVisual'),
   valRppg: document.getElementById('valRppg'),
@@ -114,6 +135,12 @@ const dom = {
 
 // ── Setup Audio & Demo Listeners ────────────────────────────────────────────
 window.addEventListener('click', () => initAudio(), { once: true });
+
+if (dom.btnTestAudio) {
+  dom.btnTestAudio.addEventListener('click', () => {
+    playTestChime();
+  });
+}
 
 dom.btnAudioToggle.addEventListener('click', () => {
   initAudio();
@@ -176,35 +203,48 @@ function renderSnapshot(s) {
   dom.sessionTime.textContent = `SESSION ${mins}:${secs} · ${fps} FPS`;
   dom.hudFps.textContent = `${fps} FPS`;
 
-  // 2. Risk Level & Alert Banner
+  // 2. Risk Level, Safety Index & Alert Banner
   const level = s.alert_level || 0;
   const label = s.alert_label || 'SAFE';
-  const score = s.smoothed_score || 0.0;
-  const scorePct = (score * 100).toFixed(1);
-  dom.bannerScore.textContent = `${scorePct}%`;
+  const riskScore = s.smoothed_score || 0.0;
+  const riskPct = Math.round(riskScore * 100);
+  const safetyPct = Math.max(0, Math.min(100, 100 - riskPct));
 
+  // Determine alert color based on safety / risk:
+  // Low safety score (< 25% or Level 3) is RED!
+  // High safety score (> 75% or Level 0) is GREEN!
   const levelClasses = ['safe', 'warning', 'danger', 'critical'];
   const colors = ['#10b981', '#f59e0b', '#f97316', '#ef4444'];
   const curColor = colors[Math.min(level, 3)];
 
   dom.alertBanner.className = `alert-banner ${levelClasses[Math.min(level, 3)]}`;
   dom.alertTag.textContent = `LEVEL ${level} · ${label}`;
-  dom.alertMessage.textContent = s.alert_message || 'Nominal driver alertness maintained.';
+  dom.alertMessage.textContent = s.alert_message || (level === 0 ? 'Nominal driver alertness maintained. All systems nominal.' : 'Fatigue / eye closure detected!');
+  dom.bannerScore.textContent = `${safetyPct}% SAFE`;
+  dom.bannerScore.style.color = curColor;
 
-  // Play auditory alert on transition or periodic danger/critical
-  if (level > 0 && (level !== state.lastAlertLevel || Math.random() < 0.15)) {
-    playChime(level);
+  // Trigger auditory alert on transition or when eyes closed
+  const isEyeClosed = !!(s.eye_closed || (s.ear > 0 && s.ear < 0.24));
+  if ((level > 0 || isEyeClosed) && (level !== state.lastAlertLevel || Math.random() < 0.20)) {
+    playChime(Math.max(level, isEyeClosed ? 3 : 1));
   }
   state.lastAlertLevel = level;
 
-  // 3. Circular Gauge
-  const circumference = 314.15; // 2 * PI * 50
-  const offset = circumference - (score * circumference);
+  // 3. Circular Gauge — Driver Safety Score
+  // Arc represents Safety: 100% = full green circle. Low safety (<25%) = minimal red arc.
+  const circumference = 314.15;
+  const safetyFraction = safetyPct / 100.0;
+  const offset = circumference * (1.0 - safetyFraction);
   dom.gaugeFill.style.strokeDashoffset = offset;
   dom.gaugeFill.style.stroke = curColor;
-  dom.gaugeScore.textContent = `${Math.round(score * 100)}%`;
+  dom.gaugeScore.textContent = `${safetyPct}%`;
   dom.gaugeScore.style.color = curColor;
-  dom.gaugeStatus.textContent = label;
+  dom.gaugeStatus.textContent = isEyeClosed ? 'EYES CLOSED' : label;
+  dom.gaugeStatus.style.color = curColor;
+  if (dom.gaugeSubtext) {
+    dom.gaugeSubtext.textContent = `Safety Index · Fatigue Risk: ${riskPct}%`;
+    dom.gaugeSubtext.style.color = curColor;
+  }
 
   // 4. Modality Breakdown Bars
   const vScore = s.visual_score || 0.0;

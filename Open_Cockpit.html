@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="refresh" content="0; url=http://localhost:8000/">
+  <title>Opening D-SAAT Localhost Cockpit...</title>
+  <style>
+    body {
+      background-color: #070a10;
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      text-align: center;
+    }
+    .card {
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 32px 40px;
+      max-width: 480px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+    h1 {
+      font-size: 1.4rem;
+      margin: 0 0 12px 0;
+      color: #38bdf8;
+    }
+    p {
+      color: #94a3b8;
+      font-size: 0.95rem;
+      line-height: 1.5;
+      margin: 0 0 20px 0;
+    }
+    .btn {
+      display: inline-block;
+      background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+      color: white;
+      text-decoration: none;
+      font-weight: 600;
+      padding: 12px 24px;
+      border-radius: 8px;
+      transition: opacity 0.2s;
+    }
+    .btn:hover {
+      opacity: 0.9;
+    }
+    .hint {
+      font-size: 0.78rem;
+      color: #64748b;
+      margin-top: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🚘 D-SAAT Cockpit</h1>
+    <p>Redirecting to your offline localhost telemetry dashboard...</p>
+    <a class="btn" href="http://localhost:8000/">Click Here if not redirected</a>
+    <div class="hint">Ensure <code>Launch_Cockpit.bat</code> or <code>web_app.py</code> is running.</div>
+  </div>
+  <script>
+    window.location.replace("http://localhost:8000/");
+  </script>
+</body>
+</html>

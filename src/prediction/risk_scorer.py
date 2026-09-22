@@ -112,6 +112,12 @@ class RiskScorer:
 
         reason = ""
 
+        # ── Immediate Eye Closure / Microsleep Override ───────────────
+        if getattr(state, "eye_closed", False) or (0 < state.ear < 0.24):
+            level = max(level, LEVEL_CRITICAL if s >= 0.50 else LEVEL_DANGER)
+            label = "CRITICAL" if level == LEVEL_CRITICAL else "DANGER"
+            reason = "MICROSLEEP WARNING: Driver eyes are closed!"
+
         # ── Smartwatch Physiological Rule Overrides ───────────────────
         # Rule 1: HR < 50 or > 120 AND rPPG agrees → Level 3 (CRITICAL)
         if state.smartwatch_connected and state.smartwatch_hr > 0:

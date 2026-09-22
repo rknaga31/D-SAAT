@@ -125,8 +125,8 @@ class VisualFeatureExtractor:
 
     def __init__(self, cfg: dict):
         vc = cfg.get("visual", {})
-        self.ear_thresh: float = vc.get("ear_threshold", 0.21)
-        self.ear_consec: int   = vc.get("ear_consecutive_frames", 3)
+        self.ear_thresh: float = vc.get("ear_threshold", 0.24)
+        self.ear_consec: int   = vc.get("ear_consecutive_frames", 2)
         self.mar_thresh: float = vc.get("mar_threshold", 0.65)
         self.mar_consec: int   = vc.get("mar_consecutive_frames", 15)
         self.perclos_win: float = vc.get("perclos_window_sec", 60.0)

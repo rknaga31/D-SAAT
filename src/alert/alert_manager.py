@@ -127,9 +127,9 @@ class AlertManager:
 
     def _fire_alert(self, level: int, msg: Optional[str] = None) -> None:
         """Play beep tone and optionally TTS in a background thread."""
-        # Generate and play beep
-        if _HAS_SD and level in self.BEEP_FREQS:
-            try:
+        try:
+            # Generate and play beep
+            if level in self.BEEP_FREQS:
                 self._play_beep(
                     freq=self.BEEP_FREQS[level],
                     duration=0.3 if level == LEVEL_WARNING else
@@ -137,27 +137,40 @@ class AlertManager:
                     volume=0.4 if level == LEVEL_WARNING else
                            0.6 if level == LEVEL_DANGER else 0.9,
                 )
-            except Exception as exc:
-                log.debug("Beep playback failed: %s", exc)
 
-        # TTS for critical only
-        if level == LEVEL_CRITICAL and self.tts_enabled:
-            speech_text = msg or self.MESSAGES[LEVEL_CRITICAL]
-            self._speak(speech_text)
+            # TTS for critical only
+            if level == LEVEL_CRITICAL and self.tts_enabled:
+                speech_text = msg or self.MESSAGES[LEVEL_CRITICAL]
+                self._speak(speech_text)
+        except Exception as exc:
+            log.debug("Alert dispatch error: %s", exc)
 
     @staticmethod
     def _play_beep(freq: float, duration: float, volume: float,
                    sample_rate: int = 22050) -> None:
-        """Generate a pure sine-wave beep and play it."""
-        t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-        # Apply fade in/out to avoid clicks
-        wave = volume * np.sin(2 * np.pi * freq * t)
-        fade_samples = int(0.02 * sample_rate)
-        fade = np.linspace(0, 1, fade_samples)
-        wave[:fade_samples] *= fade
-        wave[-fade_samples:] *= fade[::-1]
-        sd.play(wave.astype(np.float32), samplerate=sample_rate)
-        sd.wait()
+        """Generate a pure sine-wave beep safely using winsound on Windows or sounddevice."""
+        # On Windows, winsound.Beep is 100% crash-proof and directly communicates with OS
+        try:
+            import winsound
+            f = int(np.clip(freq, 37, 32767))
+            ms = int(max(50, duration * 1000))
+            winsound.Beep(f, ms)
+            return
+        except Exception:
+            pass
+
+        if _HAS_SD:
+            try:
+                t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+                wave = volume * np.sin(2 * np.pi * freq * t)
+                fade_samples = int(0.02 * sample_rate)
+                fade = np.linspace(0, 1, fade_samples)
+                wave[:fade_samples] *= fade
+                wave[-fade_samples:] *= fade[::-1]
+                sd.play(wave.astype(np.float32), samplerate=sample_rate)
+                sd.wait()
+            except Exception as exc:
+                log.debug("sd.play error: %s", exc)
 
     def _speak(self, text: str) -> None:
         """Thread-safe TTS speech."""

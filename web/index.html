@@ -35,6 +35,11 @@
         <span id="audioIcon">🔔</span>
         <span id="audioText">Alert Sound: ON</span>
       </button>
+
+      <button id="btnTestAudio" class="btn-toggle" title="Test Audio Alarm Chime">
+        <span>🔊</span>
+        <span>Test Audio</span>
+      </button>
     </div>
   </header>
 
@@ -45,7 +50,7 @@
       <span id="alertMessage" class="alert-message">Nominal driver alertness maintained. All systems nominal.</span>
     </div>
     <div style="font-family:var(--font-mono); font-size:1.1rem; font-weight:800;" id="bannerScore">
-      0.0%
+      100% SAFE
     </div>
   </section>
 
@@ -76,7 +81,7 @@
     <!-- ── Column 2: Composite Risk & Multimodal Fusion ─────────── -->
     <div class="card">
       <div class="card-title">
-        <span>🎯 Composite Risk Index</span>
+        <span>🛡️ Driver Safety & Vigilance Index</span>
         <span style="color:var(--accent-cyan); font-size:0.75rem;">Adaptive Fusion</span>
       </div>
 
@@ -85,12 +90,15 @@
           <svg class="gauge-svg" viewBox="0 0 120 120">
             <circle class="gauge-bg-circle" cx="60" cy="60" r="50"></circle>
             <circle id="gaugeFill" class="gauge-fill-circle" cx="60" cy="60" r="50"
-                    stroke="#10b981" stroke-dasharray="314.15" stroke-dashoffset="314.15"></circle>
+                    stroke="#10b981" stroke-dasharray="314.15" stroke-dashoffset="0"></circle>
           </svg>
           <div class="gauge-inner-label">
-            <div id="gaugeScore" class="gauge-score-num" style="color:#10b981;">0%</div>
-            <div id="gaugeStatus" class="gauge-score-unit">ALERT</div>
+            <div id="gaugeScore" class="gauge-score-num" style="color:#10b981;">100%</div>
+            <div id="gaugeStatus" class="gauge-score-unit">SAFE</div>
           </div>
+        </div>
+        <div id="gaugeSubtext" style="font-size:0.72rem; color:var(--text-muted); margin-top:8px; font-weight:600; text-align:center;">
+          Safety Index · Fatigue Risk: 0.0%
         </div>
       </div>
 
