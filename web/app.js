@@ -124,6 +124,9 @@ const dom = {
   barAudio: document.getElementById('barAudio'),
   valSmartwatch: document.getElementById('valSmartwatch'),
   barSmartwatch: document.getElementById('barSmartwatch'),
+  camPromptOverlay: document.getElementById('camPromptOverlay'),
+  btnOverlayStartCam: document.getElementById('btnOverlayStartCam'),
+  faceTrackingBadge: document.getElementById('faceTrackingBadge'),
   metricEar: document.getElementById('metricEar'),
   metricPerclos: document.getElementById('metricPerclos'),
   metricBlink: document.getElementById('metricBlink'),
@@ -145,6 +148,12 @@ const dom = {
 
 // ── Setup Listeners ─────────────────────────────────────────────────────────
 window.addEventListener('click', () => initAudio(), { once: true });
+
+if (dom.btnOverlayStartCam) {
+  dom.btnOverlayStartCam.addEventListener('click', () => {
+    startBrowserWebcam();
+  });
+}
 
 if (dom.btnTestAudio) {
   dom.btnTestAudio.addEventListener('click', () => {
@@ -197,6 +206,7 @@ function updateModeDisplay() {
     if (dom.btnBrowserCam) dom.btnBrowserCam.classList.add('active');
     if (dom.camIcon) dom.camIcon.textContent = '📸';
     if (dom.camText) dom.camText.textContent = 'Browser Cam: ON';
+    if (dom.camPromptOverlay) dom.camPromptOverlay.style.display = 'none';
     dom.btnDemoToggle.classList.remove('active');
   } else if (state.demoMode) {
     dom.modeBadge.textContent = 'DEMO SIMULATION';
@@ -205,13 +215,15 @@ function updateModeDisplay() {
     if (dom.btnBrowserCam) dom.btnBrowserCam.classList.remove('active');
     if (dom.camIcon) dom.camIcon.textContent = '📷';
     if (dom.camText) dom.camText.textContent = 'Browser Cam: OFF';
+    if (dom.camPromptOverlay) dom.camPromptOverlay.style.display = 'none';
   } else {
-    dom.modeBadge.textContent = 'LIVE FEED';
-    dom.modeBadge.className = 'capsule-badge capsule-live';
+    dom.modeBadge.textContent = 'STANDBY · START CAMERA';
+    dom.modeBadge.className = 'capsule-badge capsule-demo';
     dom.btnDemoToggle.classList.remove('active');
     if (dom.btnBrowserCam) dom.btnBrowserCam.classList.remove('active');
     if (dom.camIcon) dom.camIcon.textContent = '📷';
     if (dom.camText) dom.camText.textContent = 'Browser Cam: OFF';
+    if (dom.camPromptOverlay) dom.camPromptOverlay.style.display = 'flex';
   }
 }
 
@@ -237,12 +249,21 @@ async function startBrowserWebcam() {
     dom.clientVideo.srcObject = stream;
     await dom.clientVideo.play();
 
+    // Ensure video dimensions are initialized before streaming frames
+    await new Promise((resolve) => {
+      if (dom.clientVideo.videoWidth > 0 && dom.clientVideo.readyState >= 2) {
+        return resolve();
+      }
+      dom.clientVideo.onloadeddata = () => resolve();
+      setTimeout(resolve, 800);
+    });
+
     state.browserCamActive = true;
     state.demoMode = false;
     updateModeDisplay();
 
-    // Stream frames to server every 80ms (~12-13 FPS)
-    state.browserCamInterval = setInterval(sendClientFrame, 80);
+    // Stream frames to server every 100ms (~10 FPS)
+    state.browserCamInterval = setInterval(sendClientFrame, 100);
   } catch (err) {
     console.error("Camera access error:", err);
     alert("Could not access camera: " + (err.message || err.name) + "\n\nPlease ensure camera permission is granted in your browser address bar.");
@@ -272,15 +293,17 @@ function stopBrowserWebcam() {
 async function sendClientFrame() {
   if (!state.browserCamActive || state.isSendingFrame) return;
   const video = dom.clientVideo;
-  if (!video || video.readyState < 2) return;
+  if (!video || video.videoWidth === 0 || video.readyState < 2) return;
 
   const canvas = dom.clientCanvas;
   const ctx = canvas.getContext('2d');
-  canvas.width = video.videoWidth || 640;
-  canvas.height = video.videoHeight || 480;
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const targetW = Math.min(640, video.videoWidth || 640);
+  const targetH = Math.round(targetW * ((video.videoHeight || 480) / (video.videoWidth || 640)));
+  canvas.width = targetW;
+  canvas.height = targetH;
+  ctx.drawImage(video, 0, 0, targetW, targetH);
 
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.70);
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
   state.isSendingFrame = true;
 
   try {
@@ -325,6 +348,19 @@ function renderSnapshot(s) {
   }
   updateModeDisplay();
 
+  const faceDetected = s.face_detected !== false;
+  if (dom.faceTrackingBadge) {
+    if (!faceDetected && state.browserCamActive) {
+      dom.faceTrackingBadge.textContent = '⚠️ Face Not Detected';
+      dom.faceTrackingBadge.style.color = 'var(--status-warn)';
+      if (dom.hudMeshStatus) dom.hudMeshStatus.textContent = 'NO FACE IN FRAME';
+    } else {
+      dom.faceTrackingBadge.textContent = '● Tracking Active';
+      dom.faceTrackingBadge.style.color = 'var(--status-safe)';
+      if (dom.hudMeshStatus) dom.hudMeshStatus.textContent = '468-MESH ACTIVE';
+    }
+  }
+
   // 1. Session Duration & FPS
   const durSec = Math.floor(s.session_duration || 0);
   const mins = String(Math.floor(durSec / 60)).padStart(2, '0');
@@ -334,34 +370,48 @@ function renderSnapshot(s) {
   dom.hudFps.textContent = `${fps} FPS`;
 
   // 2. Risk Level, Safety Index & Alert Banner
-  const level = s.alert_level || 0;
-  const label = s.alert_label || 'SAFE';
-  const riskScore = s.smoothed_score || 0.0;
-  const riskPct = Math.round(riskScore * 100);
-  const safetyPct = Math.max(0, Math.min(100, 100 - riskPct));
+  let level = s.alert_level || 0;
+  let label = s.alert_label || 'SAFE';
+  let riskScore = s.smoothed_score || 0.0;
+
+  // Immediate Eye Closure Check
+  const earVal = s.ear || 0.0;
+  const isEyeClosed = !!(s.eye_closed || (earVal > 0.0 && earVal < 0.24));
+  if (isEyeClosed && faceDetected) {
+    level = Math.max(level, 3);
+    label = 'CRITICAL';
+    riskScore = Math.max(riskScore, 0.85);
+  }
+
+  let riskPct = Math.round(riskScore * 100);
+  let safetyPct = Math.max(0, Math.min(100, 100 - riskPct));
 
   // Determine alert color based on safety / risk:
-  // Low safety score (< 25% or Level 3) is RED!
-  // High safety score (> 75% or Level 0) is GREEN!
   const levelClasses = ['safe', 'warning', 'danger', 'critical'];
   const colors = ['#10b981', '#f59e0b', '#f97316', '#ef4444'];
   const curColor = colors[Math.min(level, 3)];
 
-  dom.alertBanner.className = `alert-banner ${levelClasses[Math.min(level, 3)]}`;
-  dom.alertTag.textContent = `LEVEL ${level} · ${label}`;
-  dom.alertMessage.textContent = s.alert_message || (level === 0 ? 'Nominal driver alertness maintained. All systems nominal.' : 'Fatigue / eye closure detected!');
-  dom.bannerScore.textContent = `${safetyPct}% SAFE`;
-  dom.bannerScore.style.color = curColor;
+  if (!faceDetected && state.browserCamActive) {
+    dom.alertBanner.className = 'alert-banner warning';
+    dom.alertTag.textContent = 'AWAITING DRIVER FACE';
+    dom.alertMessage.textContent = 'Please position your face directly in front of the camera.';
+    dom.bannerScore.textContent = 'LOOK AT CAM';
+    dom.bannerScore.style.color = '#f59e0b';
+  } else {
+    dom.alertBanner.className = `alert-banner ${levelClasses[Math.min(level, 3)]}`;
+    dom.alertTag.textContent = `LEVEL ${level} · ${label}`;
+    dom.alertMessage.textContent = isEyeClosed ? '⚠️ MICROSLEEP ALERT: Driver eyes closed!' : (s.alert_message || (level === 0 ? 'Nominal driver alertness maintained. All systems nominal.' : 'Fatigue / eye closure detected!'));
+    dom.bannerScore.textContent = `${safetyPct}% SAFE`;
+    dom.bannerScore.style.color = curColor;
+  }
 
   // Trigger auditory alert on transition or when eyes closed
-  const isEyeClosed = !!(s.eye_closed || (s.ear > 0 && s.ear < 0.24));
-  if ((level > 0 || isEyeClosed) && (level !== state.lastAlertLevel || Math.random() < 0.20)) {
+  if ((level > 0 || isEyeClosed) && (level !== state.lastAlertLevel || Math.random() < 0.25)) {
     playChime(Math.max(level, isEyeClosed ? 3 : 1));
   }
   state.lastAlertLevel = level;
 
   // 3. Circular Gauge — Driver Safety Score
-  // Arc represents Safety: 100% = full green circle. Low safety (<25%) = minimal red arc.
   const circumference = 314.15;
   const safetyFraction = safetyPct / 100.0;
   const offset = circumference * (1.0 - safetyFraction);
@@ -422,7 +472,7 @@ function renderSnapshot(s) {
   dom.hudPose.textContent = `HEAD: P ${p}° / Y ${y}° / R ${r}°`;
 
   // 6. Update Rolling History & Charts
-  updateHistory(rppgHr, watchHr, score * 100);
+  updateHistory(rppgHr, watchHr, riskScore * 100);
   drawRadar(vScore, rScore, aScore, wScore);
   drawTelemetryChart();
 }

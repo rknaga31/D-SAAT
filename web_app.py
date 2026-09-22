@@ -307,9 +307,16 @@ async def process_client_frame(payload: ClientFramePayload):
         _, jpg = cv2.imencode(".jpg", annotated_bgr, [cv2.IMWRITE_JPEG_QUALITY, 75])
         annotated_b64 = "data:image/jpeg;base64," + base64.b64encode(jpg.tobytes()).decode("utf-8")
 
-        snap = SHARED_STATE.snapshot()
-        clean_snap = sanitize_telemetry(snap)
+        # Direct telemetry from this processed client frame
+        clean_snap = sanitize_telemetry(telemetry_update)
         clean_snap["demo_mode"] = False
+
+        # Acute eye closure / microsleep guarantee
+        if clean_snap.get("eye_closed") or (0.0 < (clean_snap.get("ear") or 0.0) < 0.24):
+            clean_snap["alert_level"] = 3
+            clean_snap["alert_label"] = "CRITICAL"
+            clean_snap["alert_message"] = "MICROSLEEP ALERT: Driver eyes closed!"
+            clean_snap["smoothed_score"] = max(clean_snap.get("smoothed_score") or 0.0, 0.85)
 
         return JSONResponse({
             "status": "ok",

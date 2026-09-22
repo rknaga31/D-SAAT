@@ -78,7 +78,15 @@
         <div class="hud-info-strip">
           <span id="hudFps">30.0 FPS</span>
           <span id="hudPose">HEAD: P 0° / Y 0° / R 0°</span>
-          <span id="hudMeshStatus">468-MESH ACTIVE</span>
+          <span id="hudMeshStatus">AWAITING CAMERA</span>
+        </div>
+        <div id="camPromptOverlay" class="cam-prompt-overlay">
+          <div class="cam-prompt-content">
+            <div class="cam-prompt-icon">📷</div>
+            <div class="cam-prompt-title">Driver Camera Inactive</div>
+            <div class="cam-prompt-desc">Click below to enable your camera for live eye tracking & drowsiness detection</div>
+            <button id="btnOverlayStartCam" class="btn-overlay-start">▶ Start Camera Tracking</button>
+          </div>
         </div>
       </div>
     </div>
@@ -258,7 +266,7 @@
   </section>
 
   <!-- ── Hidden Browser Webcam Capture Elements ─────────────────── -->
-  <video id="clientVideo" autoplay playsinline muted style="display:none;"></video>
+  <video id="clientVideo" autoplay playsinline muted style="position:fixed; top:-9999px; left:-9999px; width:640px; height:480px; opacity:0; pointer-events:none;"></video>
   <canvas id="clientCanvas" width="640" height="480" style="display:none;"></canvas>
 
   <!-- ── JavaScript Application ───────────────────────────────────── -->
