@@ -171,6 +171,9 @@ class VisualFeatureExtractor:
         self._eye_was_closed: bool = False
         self._eye_closed_events: deque = deque()
         self._blink_events: deque = deque()
+        self._total_frame_events: deque = deque()
+        self._frame_timestamps: deque = deque(maxlen=30)
+        self.fps_est: float = 30.0
 
     # ── Main entry point ──────────────────────────────────────────
 
@@ -179,9 +182,22 @@ class VisualFeatureExtractor:
         if ts is None:
             ts = time.time()
 
+        # Update dynamic FPS estimate
+        self._frame_timestamps.append(ts)
+        if len(self._frame_timestamps) >= 2:
+            dt = self._frame_timestamps[-1] - self._frame_timestamps[0]
+            if dt > 0.05:
+                self.fps_est = max(3.0, (len(self._frame_timestamps) - 1) / dt)
+
         feat = VisualFeatures()
         h, w = frame.shape[:2]
         annotated = frame.copy()
+
+        # Track total frames seen for true PERCLOS calculation
+        self._total_frame_events.append(ts)
+        cutoff = ts - self.perclos_win
+        while self._total_frame_events and self._total_frame_events[0] < cutoff:
+            self._total_frame_events.popleft()
 
         if not self._available or self._detector is None:
             feat.annotated_frame = annotated
@@ -209,7 +225,7 @@ class VisualFeatureExtractor:
         # Convert normalized landmarks to pixel coords
         lm = [(int(p.x * w), int(p.y * h)) for p in face_lm]
 
-        # Safety check — we need at least 478 landmarks
+        # Safety check — we need at least 400 landmarks
         if len(lm) < 400:
             feat.annotated_frame = annotated
             return feat
@@ -239,11 +255,16 @@ class VisualFeatureExtractor:
             (feat.ear < max(self.ear_thresh, 0.255))
         )
 
+        # Adapt consecutive frame requirements to actual stream frame rate
+        fps_ratio = min(1.0, max(0.15, self.fps_est / 30.0))
+        effective_ear_consec = max(1, int(round(self.ear_consec * fps_ratio)))
+        effective_mar_consec = max(2, int(round(self.mar_consec * fps_ratio)))
+
         if feat.eye_closed:
             self._ear_consec_count += 1
             self._eye_closed_events.append(ts)
         else:
-            if self._ear_consec_count >= self.ear_consec and self._eye_was_closed:
+            if self._ear_consec_count >= effective_ear_consec and self._eye_was_closed:
                 self._blink_count += 1
                 self._blink_events.append(ts)
                 feat.blink_detected = True
@@ -253,15 +274,22 @@ class VisualFeatureExtractor:
         feat.blink_count = self._blink_count
 
         # Prune old events
-        cutoff = ts - self.perclos_win
         while self._eye_closed_events and self._eye_closed_events[0] < cutoff:
             self._eye_closed_events.popleft()
         cutoff_b = ts - self.blink_win
         while self._blink_events and self._blink_events[0] < cutoff_b:
             self._blink_events.popleft()
 
-        feat.perclos = min(1.0, len(self._eye_closed_events) / max(1, self.perclos_win * 30))
-        feat.blink_rate_per_min = len(self._blink_events) * (60.0 / self.blink_win)
+        # Robust PERCLOS: ratio of eye-closed frames to actual frames seen in window
+        total_seen = len(self._total_frame_events)
+        if total_seen >= 5:
+            feat.perclos = min(1.0, len(self._eye_closed_events) / total_seen)
+        else:
+            feat.perclos = min(1.0, len(self._eye_closed_events) / max(1, self.perclos_win * self.fps_est))
+
+        # Blink rate normalized to minutes based on elapsed window
+        elapsed_win = min(self.blink_win, max(1.0, ts - self._total_frame_events[0])) if self._total_frame_events else self.blink_win
+        feat.blink_rate_per_min = len(self._blink_events) * (60.0 / elapsed_win)
 
         # ── MAR & Yawn ────────────────────────────────────────
         feat.mar = self._compute_mar(lm)
@@ -269,7 +297,7 @@ class VisualFeatureExtractor:
         if is_yawning:
             self._mar_consec_count += 1
         else:
-            if self._mar_consec_count >= self.mar_consec:
+            if self._mar_consec_count >= effective_mar_consec:
                 self._yawn_count += 1
                 feat.yawn_detected = True
             self._mar_consec_count = 0

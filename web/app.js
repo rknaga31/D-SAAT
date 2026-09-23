@@ -366,16 +366,78 @@ function renderSnapshot(s) {
   }
   updateModeDisplay();
 
-  const faceDetected = s.face_detected !== false;
+  // Handle Standby state (prior to camera activation or demo mode)
+  const isStandby = !state.browserCamActive && !state.demoMode && s.pipeline_running === false;
+  if (isStandby) {
+    if (dom.faceTrackingBadge) {
+      dom.faceTrackingBadge.textContent = '○ Awaiting Cam';
+      dom.faceTrackingBadge.style.color = 'var(--text-muted)';
+    }
+    if (dom.hudMeshStatus) dom.hudMeshStatus.textContent = 'STANDBY';
+    if (dom.hudEyeStatus) {
+      dom.hudEyeStatus.textContent = 'EYES: --';
+      dom.hudEyeStatus.style.color = 'var(--text-muted)';
+    }
+    dom.sessionTime.textContent = 'SESSION 00:00 · STANDBY';
+    dom.hudFps.textContent = '-- FPS';
+    dom.hudPose.textContent = 'HEAD P:0° Y:0° R:0°';
+
+    dom.alertBanner.className = 'alert-banner safe';
+    dom.alertTag.textContent = 'STANDBY · READY';
+    dom.alertMessage.textContent = 'Awaiting driver camera activation or demo simulation...';
+    dom.bannerScore.textContent = '--%';
+    dom.bannerScore.style.color = 'var(--text-muted)';
+
+    const circumference = 314.15;
+    dom.gaugeFill.style.strokeDashoffset = circumference;
+    dom.gaugeFill.style.stroke = 'var(--text-muted)';
+    dom.gaugeScore.textContent = '--%';
+    dom.gaugeScore.style.color = 'var(--text-muted)';
+    dom.gaugeStatus.textContent = 'STANDBY';
+    dom.gaugeStatus.style.color = 'var(--text-muted)';
+    if (dom.gaugeSubtext) {
+      dom.gaugeSubtext.textContent = 'Enable camera to start driver safety index';
+      dom.gaugeSubtext.style.color = 'var(--text-muted)';
+    }
+
+    // Reset modality bars
+    dom.valVisual.textContent = '0.0%';
+    dom.barVisual.style.width = '0%';
+    dom.valRppg.textContent = '0.0%';
+    dom.barRppg.style.width = '0%';
+    dom.valAudio.textContent = '0.0%';
+    dom.barAudio.style.width = '0%';
+    dom.valSmartwatch.textContent = '0.0%';
+    dom.barSmartwatch.style.width = '0%';
+
+    dom.metricEar.textContent = '--';
+    dom.metricPerclos.innerHTML = `-- <span class="metric-unit">%</span>`;
+    dom.metricBlink.innerHTML = `-- <span class="metric-unit">/min</span>`;
+    dom.metricMar.textContent = '--';
+    dom.metricRppgHr.innerHTML = `-- <span class="metric-unit">BPM</span>`;
+    dom.metricRppgHrv.innerHTML = `-- <span class="metric-unit">ms</span>`;
+    dom.metricResp.innerHTML = `-- <span class="metric-unit">br/min</span>`;
+    dom.metricCrossVal.textContent = 'STANDBY';
+    dom.metricCrossVal.style.color = 'var(--text-muted)';
+    dom.metricWatchHr.innerHTML = `-- <span class="metric-unit">BPM</span>`;
+    dom.metricWatchSpo2.innerHTML = `-- <span class="metric-unit">%</span>`;
+    dom.metricWatchStress.innerHTML = `-- <span class="metric-unit">/100</span>`;
+    dom.metricWatchHrv.innerHTML = `-- <span class="metric-unit">ms</span>`;
+    return;
+  }
+
+  const faceDetected = Boolean(s.face_detected);
+  const faceLost = s.face_lost === true || s.face_lost === 1;
+
   if (dom.faceTrackingBadge) {
     if (!faceDetected && state.browserCamActive) {
       dom.faceTrackingBadge.textContent = '⚠️ Face Not Detected';
       dom.faceTrackingBadge.style.color = 'var(--status-warn)';
-      if (dom.hudMeshStatus) dom.hudMeshStatus.textContent = 'NO FACE IN FRAME';
+      if (dom.hudMeshStatus) dom.hudMeshStatus.textContent = 'NO FACE';
     } else {
       dom.faceTrackingBadge.textContent = '● Tracking Active';
       dom.faceTrackingBadge.style.color = 'var(--status-safe)';
-      if (dom.hudMeshStatus) dom.hudMeshStatus.textContent = '468-MESH ACTIVE';
+      if (dom.hudMeshStatus) dom.hudMeshStatus.textContent = 'MESH 468';
     }
   }
 
@@ -392,20 +454,26 @@ function renderSnapshot(s) {
   let label = s.alert_label || 'SAFE';
   let riskScore = s.smoothed_score || 0.0;
 
-  // Immediate Eye Closure Check (Dual-Signal: AI Blendshapes + EAR)
+  // Immediate Feature Checks (AI Blendshapes + EAR + MAR + Head Pose)
   const earVal = s.ear || 0.0;
   const blinkScore = s.blink_score || Math.max(s.eye_blink_left || 0, s.eye_blink_right || 0);
   const isEyeClosed = !!(s.eye_closed || (earVal > 0.0 && earVal < 0.255) || blinkScore >= 0.38);
+  const marVal = s.mar || 0.0;
+  const isYawning = !!(s.yawn_detected_visual || marVal >= 0.58);
+  const isDistracted = !!(s.head_pose_alert || Math.abs(s.yaw || 0) > 28 || (s.pitch || 0) < -22);
 
   if (dom.hudEyeStatus) {
     if (!faceDetected && state.browserCamActive) {
       dom.hudEyeStatus.textContent = 'EYES: NO FACE';
       dom.hudEyeStatus.style.color = '#f59e0b';
     } else if (isEyeClosed) {
-      dom.hudEyeStatus.textContent = `EYES: CLOSED ⚠️ (${earVal > 0 ? earVal.toFixed(2) : 'SHUT'})`;
+      dom.hudEyeStatus.textContent = `EYES: CLOSED (${earVal > 0 ? earVal.toFixed(2) : 'SHUT'})`;
       dom.hudEyeStatus.style.color = '#ef4444';
+    } else if (isYawning) {
+      dom.hudEyeStatus.textContent = `MOUTH: YAWN (${marVal.toFixed(2)})`;
+      dom.hudEyeStatus.style.color = '#f97316';
     } else {
-      dom.hudEyeStatus.textContent = `EYES: OPEN (EAR ${earVal.toFixed(2)})`;
+      dom.hudEyeStatus.textContent = `EYES: OPEN (${earVal.toFixed(2)})`;
       dom.hudEyeStatus.style.color = 'var(--accent-cyan)';
     }
   }
@@ -415,16 +483,41 @@ function renderSnapshot(s) {
     if (isEyeClosed && faceDetected) {
       wrapper.style.borderColor = '#ef4444';
       wrapper.style.boxShadow = '0 0 28px rgba(239, 68, 68, 0.75)';
+    } else if (!faceDetected && state.browserCamActive) {
+      wrapper.style.borderColor = '#f59e0b';
+      wrapper.style.boxShadow = '0 0 20px rgba(245, 158, 11, 0.5)';
+    } else if (isYawning) {
+      wrapper.style.borderColor = '#f97316';
+      wrapper.style.boxShadow = '0 0 20px rgba(249, 115, 22, 0.5)';
     } else {
       wrapper.style.borderColor = 'rgba(56, 189, 248, 0.2)';
       wrapper.style.boxShadow = '0 0 20px rgba(0, 0, 0, 0.6)';
     }
   }
 
-  if (isEyeClosed && faceDetected) {
+  // Elevate risk based on detected events
+  if (!faceDetected && state.browserCamActive) {
+    if (faceLost) {
+      level = Math.max(level, 2);
+      label = 'DANGER';
+      riskScore = Math.max(riskScore, 0.65);
+    } else {
+      level = Math.max(level, 1);
+      label = 'ATTENTION LOST';
+      riskScore = Math.max(riskScore, 0.45);
+    }
+  } else if (isEyeClosed && faceDetected) {
     level = Math.max(level, 3);
     label = 'CRITICAL';
     riskScore = Math.max(riskScore, 0.85);
+  } else if (isYawning && faceDetected) {
+    level = Math.max(level, 1);
+    label = level >= 2 ? 'DANGER' : 'WARNING';
+    riskScore = Math.max(riskScore, 0.40);
+  } else if (isDistracted && faceDetected) {
+    level = Math.max(level, 1);
+    label = label === 'SAFE' ? 'DISTRACTED' : label;
+    riskScore = Math.max(riskScore, 0.35);
   }
 
   let riskPct = Math.round(riskScore * 100);
@@ -434,19 +527,62 @@ function renderSnapshot(s) {
   const levelClasses = ['safe', 'warning', 'danger', 'critical'];
   const colors = ['#10b981', '#f59e0b', '#f97316', '#ef4444'];
   const curColor = colors[Math.min(level, 3)];
+  const circumference = 314.15;
 
   if (!faceDetected && state.browserCamActive) {
     dom.alertBanner.className = 'alert-banner warning';
-    dom.alertTag.textContent = 'AWAITING DRIVER FACE';
-    dom.alertMessage.textContent = 'Please position your face directly in front of the camera.';
-    dom.bannerScore.textContent = 'LOOK AT CAM';
+    dom.alertTag.textContent = faceLost ? 'DRIVER ATTENTION LOST' : 'AWAITING DRIVER FACE';
+    dom.alertMessage.textContent = 'Driver face not detected in camera view! Maintain visual attention on the road.';
+    dom.bannerScore.textContent = 'NO FACE';
     dom.bannerScore.style.color = '#f59e0b';
+
+    dom.gaugeFill.style.strokeDashoffset = circumference * 0.4;
+    dom.gaugeFill.style.stroke = '#f59e0b';
+    dom.gaugeScore.textContent = 'NO FACE';
+    dom.gaugeScore.style.color = '#f59e0b';
+    dom.gaugeStatus.textContent = 'ATTENTION LOST';
+    dom.gaugeStatus.style.color = '#f59e0b';
+    if (dom.gaugeSubtext) {
+      dom.gaugeSubtext.textContent = 'Driver face not in camera view';
+      dom.gaugeSubtext.style.color = '#f59e0b';
+    }
   } else {
     dom.alertBanner.className = `alert-banner ${levelClasses[Math.min(level, 3)]}`;
     dom.alertTag.textContent = `LEVEL ${level} · ${label}`;
-    dom.alertMessage.textContent = isEyeClosed ? '⚠️ MICROSLEEP ALERT: Driver eyes closed!' : (s.alert_message || (level === 0 ? 'Nominal driver alertness maintained. All systems nominal.' : 'Fatigue / eye closure detected!'));
+    let msg = s.alert_message;
+    if (isEyeClosed) {
+      msg = '⚠️ MICROSLEEP ALERT: Driver eyes closed!';
+    } else if (isYawning) {
+      msg = '⚠️ YAWNING DETECTED: Signs of driver fatigue observed';
+    } else if (isDistracted) {
+      msg = '⚠️ DISTRACTION: Driver looking away from road';
+    } else if (level === 0) {
+      msg = 'Nominal driver alertness maintained. All systems nominal.';
+    }
+    dom.alertMessage.textContent = msg;
     dom.bannerScore.textContent = `${safetyPct}% SAFE`;
     dom.bannerScore.style.color = curColor;
+
+    // 3. Circular Gauge — Driver Safety Score
+    const safetyFraction = safetyPct / 100.0;
+    const offset = circumference * (1.0 - safetyFraction);
+    dom.gaugeFill.style.strokeDashoffset = offset;
+    dom.gaugeFill.style.stroke = curColor;
+    dom.gaugeScore.textContent = `${safetyPct}%`;
+    dom.gaugeScore.style.color = curColor;
+
+    let statusText = label;
+    if (isEyeClosed) statusText = 'MICROSLEEP';
+    else if (isYawning) statusText = 'YAWN / DROWSY';
+    else if (isDistracted) statusText = 'DISTRACTED';
+    else if (level === 0) statusText = 'VIGILANT';
+
+    dom.gaugeStatus.textContent = statusText;
+    dom.gaugeStatus.style.color = curColor;
+    if (dom.gaugeSubtext) {
+      dom.gaugeSubtext.textContent = `Safety Index · Fatigue Risk: ${riskPct}%`;
+      dom.gaugeSubtext.style.color = curColor;
+    }
   }
 
   // Trigger auditory alert on transition or when eyes closed
@@ -454,21 +590,6 @@ function renderSnapshot(s) {
     playChime(Math.max(level, isEyeClosed ? 3 : 1));
   }
   state.lastAlertLevel = level;
-
-  // 3. Circular Gauge — Driver Safety Score
-  const circumference = 314.15;
-  const safetyFraction = safetyPct / 100.0;
-  const offset = circumference * (1.0 - safetyFraction);
-  dom.gaugeFill.style.strokeDashoffset = offset;
-  dom.gaugeFill.style.stroke = curColor;
-  dom.gaugeScore.textContent = `${safetyPct}%`;
-  dom.gaugeScore.style.color = curColor;
-  dom.gaugeStatus.textContent = isEyeClosed ? 'EYES CLOSED' : label;
-  dom.gaugeStatus.style.color = curColor;
-  if (dom.gaugeSubtext) {
-    dom.gaugeSubtext.textContent = `Safety Index · Fatigue Risk: ${riskPct}%`;
-    dom.gaugeSubtext.style.color = curColor;
-  }
 
   // 4. Modality Breakdown Bars
   const vScore = s.visual_score || 0.0;
@@ -513,7 +634,7 @@ function renderSnapshot(s) {
   const p = Math.round(s.pitch || 0);
   const y = Math.round(s.yaw || 0);
   const r = Math.round(s.roll || 0);
-  dom.hudPose.textContent = `HEAD: P ${p}° / Y ${y}° / R ${r}°`;
+  dom.hudPose.textContent = `HEAD P:${p}° Y:${y}° R:${r}°`;
 
   // 6. Update Rolling History & Charts
   updateHistory(rppgHr, watchHr, riskScore * 100);
@@ -547,16 +668,16 @@ function drawRadar(vis, rppg, audio, watch) {
   const w = canvas.width;
   const h = canvas.height;
   const cx = w / 2;
-  const cy = h / 2 + 8;
-  const maxR = 60;
+  const cy = h / 2;
+  const maxR = 48;
 
   ctx.clearRect(0, 0, w, h);
 
   const axes = [
-    { label: 'Visual', angle: -Math.PI / 2, val: Math.min(1, Math.max(0, vis)) },
-    { label: 'rPPG', angle: 0, val: Math.min(1, Math.max(0, rppg)) },
-    { label: 'Audio', angle: Math.PI / 2, val: Math.min(1, Math.max(0, audio)) },
-    { label: 'Watch', angle: Math.PI, val: Math.min(1, Math.max(0, watch)) }
+    { label: 'Visual', angle: -Math.PI / 2, val: Math.min(1, Math.max(0, vis)), align: 'center', baseline: 'bottom', offsetR: 6 },
+    { label: 'rPPG', angle: 0, val: Math.min(1, Math.max(0, rppg)), align: 'left', baseline: 'middle', offsetR: 8 },
+    { label: 'Audio', angle: Math.PI / 2, val: Math.min(1, Math.max(0, audio)), align: 'center', baseline: 'top', offsetR: 6 },
+    { label: 'Watch', angle: Math.PI, val: Math.min(1, Math.max(0, watch)), align: 'right', baseline: 'middle', offsetR: 8 }
   ];
 
   // Concentric background rings
@@ -575,26 +696,28 @@ function drawRadar(vis, rppg, audio, watch) {
   });
 
   // Axis spokes & labels
-  ctx.fillStyle = '#64748b';
+  ctx.fillStyle = '#94a3b8';
   ctx.font = '10px Inter, sans-serif';
-  ctx.textAlign = 'center';
   axes.forEach(axis => {
     const x = cx + Math.cos(axis.angle) * maxR;
     const y = cy + Math.sin(axis.angle) * maxR;
     ctx.beginPath();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
     ctx.moveTo(cx, cy);
     ctx.lineTo(x, y);
     ctx.stroke();
 
-    const lx = cx + Math.cos(axis.angle) * (maxR + 14);
-    const ly = cy + Math.sin(axis.angle) * (maxR + 14) + 3;
+    const lx = cx + Math.cos(axis.angle) * (maxR + axis.offsetR);
+    const ly = cy + Math.sin(axis.angle) * (maxR + axis.offsetR);
+    ctx.textAlign = axis.align;
+    ctx.textBaseline = axis.baseline;
     ctx.fillText(axis.label, lx, ly);
   });
 
   // Modality values polygon
   ctx.beginPath();
   axes.forEach((axis, i) => {
-    const r = Math.max(10, axis.val * maxR);
+    const r = Math.max(8, axis.val * maxR);
     const x = cx + Math.cos(axis.angle) * r;
     const y = cy + Math.sin(axis.angle) * r;
     if (i === 0) ctx.moveTo(x, y);
@@ -609,7 +732,7 @@ function drawRadar(vis, rppg, audio, watch) {
 
   // Highlight points
   axes.forEach(axis => {
-    const r = Math.max(10, axis.val * maxR);
+    const r = Math.max(8, axis.val * maxR);
     const x = cx + Math.cos(axis.angle) * r;
     const y = cy + Math.sin(axis.angle) * r;
     ctx.beginPath();
@@ -625,9 +748,9 @@ function drawTelemetryChart() {
   if (!canvas) return;
 
   const rect = canvas.getBoundingClientRect();
-  if (canvas.width !== rect.width || canvas.height !== rect.height) {
-    canvas.width = rect.width;
-    canvas.height = rect.height;
+  if (rect.width > 0 && rect.height > 0 && (canvas.width !== Math.round(rect.width) || canvas.height !== Math.round(rect.height))) {
+    canvas.width = Math.round(rect.width);
+    canvas.height = Math.round(rect.height);
   }
 
   const ctx = canvas.getContext('2d');

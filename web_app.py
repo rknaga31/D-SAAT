@@ -20,6 +20,7 @@ import threading
 import webbrowser
 from pathlib import Path
 from typing import Generator, Optional
+from contextlib import asynccontextmanager
 
 import base64
 from pydantic import BaseModel
@@ -54,7 +55,24 @@ _shutdown = threading.Event()
 _DEMO_MODE = False
 _PIPELINE_STARTED = False
 
-app = FastAPI(title="D-SAAT Cockpit", docs_url=None, redoc_url=None)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    ensure_pipeline()
+    yield
+    if worker:
+        worker.stop()
+
+
+app = FastAPI(title="D-SAAT Cockpit", docs_url=None, redoc_url=None, lifespan=lifespan)
+
+@app.middleware("http")
+async def add_no_cache_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 # Mount static web directory for CSS and JS
 web_dir = _ROOT / "web"
@@ -112,6 +130,43 @@ def get_demo_snapshot() -> dict:
         "pitch": round(4.5 * math.sin(t / 8.0), 1),
         "yaw": round(8.0 * math.sin(t / 10.0), 1),
         "roll": round(2.5 * math.cos(t / 12.0), 1),
+    }
+
+
+def get_standby_snapshot() -> dict:
+    """Returns a clean standby state when camera is awaiting activation."""
+    return {
+        "demo_mode": False,
+        "pipeline_running": False,
+        "session_duration": 0.0,
+        "actual_fps": 0.0,
+        "face_detected": False,
+        "face_lost": False,
+        "ear": 0.0,
+        "mar": 0.0,
+        "perclos": 0.0,
+        "blink_rate": 0.0,
+        "heart_rate": 0.0,
+        "hrv_rmssd": 0.0,
+        "breathing_rate": 0.0,
+        "visual_score": 0.0,
+        "rppg_score": 0.0,
+        "audio_score": 0.0,
+        "smartwatch_score": 0.0,
+        "smartwatch_hr": 0.0,
+        "smartwatch_spo2": 0.0,
+        "smartwatch_stress": 0.0,
+        "smartwatch_hrv": 0.0,
+        "cross_val_status": "STANDBY",
+        "fused_score": 0.0,
+        "smoothed_score": 0.0,
+        "alert_level": 0,
+        "alert_label": "STANDBY",
+        "alert_color": "#64748b",
+        "alert_message": "Awaiting driver camera activation...",
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0,
     }
 
 
@@ -174,7 +229,7 @@ def generate_synthetic_frame() -> bytes:
     bar_color = colors[level]
     cv2.rectangle(frame, (0, 0), (w, 36), bar_color, -1)
     cv2.putText(frame, f"D-SAAT DEMO  |  ALERT: {snap['alert_label']}  |  RISK: {snap['smoothed_score']*100:.1f}%",
-                (12, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                (16, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (255, 255, 255), 2)
 
     _, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
     return jpeg.tobytes()
@@ -234,6 +289,27 @@ class WebPipelineWorker:
 worker: Optional[WebPipelineWorker] = None
 
 
+def ensure_pipeline() -> WebPipelineWorker:
+    """Ensures pipeline worker is initialized for client frame processing."""
+    global worker
+    if worker is None:
+        import yaml
+        cfg_path = _ROOT / "config.yaml"
+        if cfg_path.exists():
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                cfg = yaml.safe_load(f)
+        else:
+            cfg = {}
+        configure_from_config(cfg)
+        worker = WebPipelineWorker(cfg)
+        from main import ProcessingPipeline
+        worker.pipeline = ProcessingPipeline(cfg, None, None, SHARED_STATE)
+    elif worker.pipeline is None:
+        from main import ProcessingPipeline
+        worker.pipeline = ProcessingPipeline(worker.cfg, None, None, SHARED_STATE)
+    return worker
+
+
 def sanitize_telemetry(raw: dict) -> dict:
     """Sanitizes shared state dictionary into JSON-serializable primitives."""
     clean = {}
@@ -242,10 +318,10 @@ def sanitize_telemetry(raw: dict) -> dict:
             continue
         if isinstance(v, (np.floating, float)):
             clean[k] = None if (math.isnan(v) or math.isinf(v)) else round(float(v), 4)
+        elif isinstance(v, (bool, np.bool_)):
+            clean[k] = bool(v)
         elif isinstance(v, (np.integer, int)):
             clean[k] = int(v)
-        elif isinstance(v, (np.bool_, bool)):
-            clean[k] = bool(v)
         elif isinstance(v, (np.ndarray, bytes)):
             continue
         else:
@@ -275,7 +351,12 @@ def get_telemetry():
 
     snap = SHARED_STATE.snapshot()
     if not snap or not snap.get("pipeline_running"):
-        return JSONResponse(get_demo_snapshot())
+        return JSONResponse(get_standby_snapshot())
+
+    # If telemetry is older than 5.0s (stream interrupted and no hardware cam)
+    last_ts = snap.get("frame_ts", 0.0)
+    if time.time() - last_ts > 5.0 and (worker is None or worker.video_cap is None):
+        return JSONResponse(get_standby_snapshot())
 
     clean_snap = sanitize_telemetry(snap)
     clean_snap["demo_mode"] = False
@@ -293,6 +374,7 @@ def toggle_demo_mode():
 async def process_client_frame(payload: ClientFramePayload):
     """Processes a video frame streamed from the client's browser webcam."""
     global _DEMO_MODE, worker
+    ensure_pipeline()
     if worker is None or worker.pipeline is None:
         return JSONResponse({"error": "Pipeline not initialized"}, status_code=503)
 
@@ -318,12 +400,34 @@ async def process_client_frame(payload: ClientFramePayload):
         clean_snap = sanitize_telemetry(telemetry_update)
         clean_snap["demo_mode"] = False
 
-        # Acute eye closure / microsleep guarantee
-        if clean_snap.get("eye_closed") or (0.0 < (clean_snap.get("ear") or 0.0) < 0.24):
+        # Eye closure / microsleep priority guarantee
+        ear_val = clean_snap.get("ear") or 0.0
+        blink_score = clean_snap.get("blink_score") or 0.0
+        is_closed = bool(clean_snap.get("eye_closed") or (0.0 < ear_val < 0.255) or blink_score >= 0.38)
+
+        if is_closed and clean_snap.get("face_detected"):
             clean_snap["alert_level"] = 3
             clean_snap["alert_label"] = "CRITICAL"
             clean_snap["alert_message"] = "MICROSLEEP ALERT: Driver eyes closed!"
             clean_snap["smoothed_score"] = max(clean_snap.get("smoothed_score") or 0.0, 0.85)
+        elif not clean_snap.get("face_detected"):
+            clean_snap["alert_level"] = max(clean_snap.get("alert_level") or 0, 1)
+            clean_snap["alert_label"] = "WARNING"
+            if clean_snap.get("face_lost"):
+                clean_snap["alert_message"] = "DRIVER ATTENTION LOST: Face not detected in driver zone!"
+                clean_snap["smoothed_score"] = max(clean_snap.get("smoothed_score") or 0.0, 0.55)
+            else:
+                clean_snap["alert_message"] = "AWAITING DRIVER FACE: Position face towards camera"
+                clean_snap["smoothed_score"] = max(clean_snap.get("smoothed_score") or 0.0, 0.45)
+
+        # Sync back to shared state
+        SHARED_STATE.update(
+            smoothed_score=clean_snap["smoothed_score"],
+            alert_level=clean_snap["alert_level"],
+            alert_label=clean_snap["alert_label"],
+            alert_message=clean_snap.get("alert_message", ""),
+            frame_ts=time.time()
+        )
 
         return JSONResponse({
             "status": "ok",
@@ -338,16 +442,18 @@ async def process_client_frame(payload: ClientFramePayload):
 def frame_stream_generator() -> Generator[bytes, None, None]:
     """Generates continuous MJPEG multipart stream for <img> tag."""
     while not _shutdown.is_set():
-        if _DEMO_MODE:
-            frame_bytes = generate_synthetic_frame()
-        else:
+        frame_bytes = None
+        if not _DEMO_MODE:
             frame_bytes = SHARED_STATE.get("frame_jpg")
-            if frame_bytes is None:
-                frame_bytes = generate_synthetic_frame()
+            last_ts = SHARED_STATE.get("frame_ts", 0.0)
+            if frame_bytes and time.time() - last_ts > 5.0 and (worker is None or worker.video_cap is None):
+                frame_bytes = None  # Stale, fallback to synthetic
+        if frame_bytes is None:
+            frame_bytes = generate_synthetic_frame()
 
         yield (b"--frame\r\n"
                b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n")
-        time.sleep(0.033)  # ~30 FPS
+        time.sleep(0.04)  # ~25 FPS to preserve cloud container CPU
 
 
 @app.get("/api/video_feed")

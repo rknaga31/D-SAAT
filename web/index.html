@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>D-SAAT · Driver Safety AI-Assisted Telemetry</title>
-  <link rel="stylesheet" href="/static/style.css?v=2.5" />
+  <link rel="stylesheet" href="/static/style.css?v=3.1" />
 </head>
 <body>
 
@@ -14,7 +14,7 @@
       <div class="brand-icon">🚘</div>
       <div>
         <div class="brand-title">
-          <span>D-</span><span class="accent">SAAT</span>
+          <span class="brand-logo-text">D-<span class="accent">SAAT</span></span>
           <span id="modeBadge" class="capsule-badge capsule-live">LIVE FEED</span>
         </div>
         <div class="brand-subtitle">Driver Safety AI-Assisted · Edge Multimodal Cockpit</div>
@@ -51,11 +51,11 @@
   <!-- ── Alert Status Banner ──────────────────────────────────────── -->
   <section id="alertBanner" class="alert-banner safe">
     <div class="alert-main">
-      <span id="alertTag" class="alert-tag">LEVEL 0 · SAFE</span>
-      <span id="alertMessage" class="alert-message">Nominal driver alertness maintained. All systems nominal.</span>
+      <span id="alertTag" class="alert-tag">STANDBY · READY</span>
+      <span id="alertMessage" class="alert-message">System ready. Start camera tracking or run demo simulation.</span>
     </div>
     <div style="font-family:var(--font-mono); font-size:1.1rem; font-weight:800;" id="bannerScore">
-      100% SAFE
+      --%
     </div>
   </section>
 
@@ -66,7 +66,7 @@
     <div class="card">
       <div class="card-title">
         <span>🎥 Real-Time Driver HUD</span>
-        <span id="faceTrackingBadge" style="color:var(--status-safe); font-size:0.75rem;">● Tracking Active</span>
+        <span id="faceTrackingBadge" style="color:var(--text-muted); font-size:0.75rem;">○ Awaiting Cam</span>
       </div>
 
       <div class="video-hud-wrapper">
@@ -78,10 +78,10 @@
         <div class="hud-reticle-bl"></div>
         <div class="hud-reticle-br"></div>
         <div class="hud-info-strip">
-          <span id="hudFps">30.0 FPS</span>
-          <span id="hudPose">HEAD: P 0° / Y 0° / R 0°</span>
-          <span id="hudEyeStatus">EYES: OPEN</span>
-          <span id="hudMeshStatus">AWAITING CAMERA</span>
+          <span id="hudFps">-- FPS</span>
+          <span id="hudPose">HEAD P:0° Y:0° R:0°</span>
+          <span id="hudEyeStatus">EYES: --</span>
+          <span id="hudMeshStatus">STANDBY</span>
         </div>
         <div id="camPromptOverlay" class="cam-prompt-overlay">
           <div class="cam-prompt-content">
@@ -109,12 +109,12 @@
                     stroke="#10b981" stroke-dasharray="314.15" stroke-dashoffset="0"></circle>
           </svg>
           <div class="gauge-inner-label">
-            <div id="gaugeScore" class="gauge-score-num" style="color:#10b981;">100%</div>
-            <div id="gaugeStatus" class="gauge-score-unit">SAFE</div>
+            <div id="gaugeScore" class="gauge-score-num" style="color:#10b981;">--%</div>
+            <div id="gaugeStatus" class="gauge-score-unit">STANDBY</div>
           </div>
         </div>
         <div id="gaugeSubtext" style="font-size:0.72rem; color:var(--text-muted); margin-top:8px; font-weight:600; text-align:center;">
-          Safety Index · Fatigue Risk: 0.0%
+          Awaiting driver camera activation...
         </div>
       </div>
 
@@ -269,6 +269,6 @@
   </section>
 
   <!-- ── JavaScript Application ───────────────────────────────────── -->
-  <script src="/static/app.js?v=2.5"></script>
+  <script src="/static/app.js?v=3.1"></script>
 </body>
 </html>

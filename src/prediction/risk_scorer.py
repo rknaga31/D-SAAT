@@ -45,6 +45,10 @@ class RiskAssessment:
     # Specific diagnostic reason for escalated alerts
     alert_reason: str = ""
 
+    # Face presence
+    face_detected: bool = True
+    face_lost: bool = False
+
     # Session statistics
     session_duration_sec: float = 0.0
     total_drowsy_events: int = 0
@@ -147,6 +151,13 @@ class RiskScorer:
                 if not reason:
                     reason = f"High stress ({state.smartwatch_stress:.0f}/100) with visual fatigue"
 
+        # ── Driver Missing / Attention Loss Override ─────────────────
+        if getattr(state, "face_lost", False):
+            level = max(level, LEVEL_WARNING)
+            label = "WARNING" if level == LEVEL_WARNING else label
+            if not reason:
+                reason = "DRIVER ATTENTION LOST: Face not detected in driver zone!"
+
         # Count events (level transitions upward)
         if level > self._prev_level:
             self._drowsy_events += 1
@@ -179,6 +190,8 @@ class RiskScorer:
             smartwatch_connected=state.smartwatch_connected,
             cross_validation_status=state.cross_validation_status,
             alert_reason=reason,
+            face_detected=getattr(state, "face_detected", True),
+            face_lost=getattr(state, "face_lost", False),
             session_duration_sec=time.time() - self._session_start,
             total_drowsy_events=self._drowsy_events,
             critical_event_count=self._critical_events,

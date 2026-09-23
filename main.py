@@ -143,7 +143,7 @@ class ProcessingPipeline:
         # Encode frame as JPEG bytes
         _, jpg = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 80])
 
-        current_fps = self.video_cap.actual_fps if self.video_cap else 30.0
+        current_fps = self.video_cap.actual_fps if self.video_cap else getattr(self.visual_ext, "fps_est", 30.0)
 
         telemetry_update = dict(
             # Frame
@@ -153,9 +153,13 @@ class ProcessingPipeline:
 
             # Visual
             face_detected=vis.face_detected,
+            face_lost=getattr(fused, "face_lost", False),
             ear=vis.ear,
             ear_left=vis.ear_left,
             ear_right=vis.ear_right,
+            blink_score=getattr(vis, "blink_score", 0.0),
+            eye_blink_left=getattr(vis, "eye_blink_left", 0.0),
+            eye_blink_right=getattr(vis, "eye_blink_right", 0.0),
             mar=vis.mar,
             perclos=vis.perclos,
             blink_rate=vis.blink_rate_per_min,

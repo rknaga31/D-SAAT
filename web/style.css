@@ -85,7 +85,14 @@ body {
   letter-spacing: -0.02em;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+}
+
+.brand-logo-text {
+  display: inline-flex;
+  align-items: center;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
 }
 
 .brand-title .accent {
@@ -370,21 +377,40 @@ body {
   border-color: var(--accent-cyan);
   pointer-events: none;
 }
-.hud-reticle-tl { top: 10px; left: 10px; border-top: 2px solid; border-left: 2px solid; }
-.hud-reticle-tr { top: 10px; right: 10px; border-top: 2px solid; border-right: 2px solid; }
+.hud-reticle-tl { top: 42px; left: 10px; border-top: 2px solid; border-left: 2px solid; }
+.hud-reticle-tr { top: 42px; right: 10px; border-top: 2px solid; border-right: 2px solid; }
 .hud-reticle-bl { bottom: 10px; left: 10px; border-bottom: 2px solid; border-left: 2px solid; }
 .hud-reticle-br { bottom: 10px; right: 10px; border-bottom: 2px solid; border-right: 2px solid; }
 
 .hud-info-strip {
   position: absolute;
   bottom: 0; left: 0; right: 0;
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.85));
-  padding: 10px 14px;
+  background: linear-gradient(transparent, rgba(5, 8, 16, 0.94));
+  padding: 6px 10px;
   display: flex;
+  align-items: center;
   justify-content: space-between;
+  gap: 6px;
   font-family: var(--font-mono);
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   color: var(--accent-cyan);
+  white-space: nowrap;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 5;
+}
+
+.hud-info-strip span {
+  flex-shrink: 0;
+  white-space: nowrap !important;
+  background: rgba(14, 22, 38, 0.85);
+  backdrop-filter: blur(6px);
+  padding: 3px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  display: inline-flex;
+  align-items: center;
+  line-height: 1.2;
 }
 
 /* ── Column 2: Risk Gauge & Multimodal Radar ─────────────────── */
