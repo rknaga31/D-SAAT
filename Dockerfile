@@ -12,7 +12,9 @@ WORKDIR /app
 # Install system dependencies for OpenCV and Audio
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
+    libegl1 \
     libglib2.0-0 \
+    libgomp1 \
     portaudio19-dev \
     libsndfile1 \
     espeak \
