@@ -39,7 +39,7 @@ from src.utils.buffer import SharedState
 from src.utils.logger import get_logger, configure_from_config
 from src.capture.video_capture import VideoCapture
 from src.capture.audio_capture import AudioCapture
-from src.features.visual_features import VisualFeatureExtractor
+from src.features.visual_features import VisualFeatureExtractor, _HAS_MEDIAPIPE, _MODEL_PATH
 from src.features.rppg_features import RPPGExtractor
 from src.features.audio_features import AudioFeatureExtractor
 from src.features.smartwatch_features import SmartwatchFeatureExtractor
@@ -429,14 +429,38 @@ async def process_client_frame(payload: ClientFramePayload):
             frame_ts=time.time()
         )
 
+        visual_ext = getattr(worker.pipeline, "visual_ext", None)
         return JSONResponse({
             "status": "ok",
             "telemetry": clean_snap,
-            "annotated_frame": annotated_b64
+            "annotated_frame": annotated_b64,
+            "diagnostics": {
+                "detector_available": getattr(visual_ext, "_available", False) if visual_ext else False,
+                "init_error": getattr(visual_ext, "_init_error", None) if visual_ext else None,
+                "last_detect_error": getattr(visual_ext, "_last_detect_error", None) if visual_ext else None,
+            }
         })
     except Exception as exc:
         log.error(f"Error processing client frame: {exc}")
         return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+@app.get("/api/diagnostics")
+def get_diagnostics():
+    global worker
+    ensure_pipeline()
+    visual_ext = getattr(worker.pipeline, "visual_ext", None) if worker and worker.pipeline else None
+    return JSONResponse({
+        "status": "ok",
+        "mediapipe_imported": _HAS_MEDIAPIPE,
+        "detector_available": getattr(visual_ext, "_available", False) if visual_ext else False,
+        "init_error": getattr(visual_ext, "_init_error", None) if visual_ext else "No visual_ext",
+        "last_detect_error": getattr(visual_ext, "_last_detect_error", None) if visual_ext else None,
+        "model_path_exists": _MODEL_PATH.exists(),
+        "model_path_size": _MODEL_PATH.stat().st_size if _MODEL_PATH.exists() else 0,
+        "python_version": sys.version,
+        "platform": sys.platform,
+    })
 
 
 def frame_stream_generator() -> Generator[bytes, None, None]:

@@ -140,27 +140,57 @@ class VisualFeatureExtractor:
 
         self._detector = None
         self._available = False
+        self._init_error = None
+        self._last_detect_error = None
 
         if _HAS_MEDIAPIPE:
+            model_bytes = None
             try:
                 model_path = _ensure_model()
-                base_options = mp_tasks.BaseOptions(model_asset_path=model_path)
-                options = mp_vision.FaceLandmarkerOptions(
-                    base_options=base_options,
-                    running_mode=RunningMode.IMAGE,
-                    num_faces=1,
-                    min_face_detection_confidence=0.5,
-                    min_face_presence_confidence=0.5,
-                    min_tracking_confidence=0.5,
-                    output_face_blendshapes=True,
-                )
-                self._detector = mp_vision.FaceLandmarker.create_from_options(options)
-                self._available = True
-                log.info("VisualFeatureExtractor initialised (MediaPipe Tasks API + Blendshapes).")
+                with open(model_path, "rb") as mf:
+                    model_bytes = mf.read()
+                log.info("Loaded MediaPipe model (%d bytes).", len(model_bytes))
             except Exception as exc:
-                log.error("FaceLandmarker init failed: %s", exc)
-                log.warning("Visual features will be unavailable.")
+                self._init_error = f"Model load failed: {exc}"
+                log.error("Failed to load FaceLandmarker model file: %s", exc)
+
+            if model_bytes:
+                # 1. Attempt primary init with blendshapes
+                try:
+                    base_options = mp_tasks.BaseOptions(model_asset_buffer=model_bytes)
+                    options = mp_vision.FaceLandmarkerOptions(
+                        base_options=base_options,
+                        running_mode=RunningMode.IMAGE,
+                        num_faces=1,
+                        min_face_detection_confidence=0.25,
+                        min_face_presence_confidence=0.25,
+                        output_face_blendshapes=True,
+                    )
+                    self._detector = mp_vision.FaceLandmarker.create_from_options(options)
+                    self._available = True
+                    log.info("VisualFeatureExtractor initialised (MediaPipe Tasks API + Blendshapes).")
+                except Exception as exc:
+                    log.warning("FaceLandmarker with blendshapes failed (%s). Retrying without blendshapes...", exc)
+                    # 2. Resilient fallback without blendshapes (essential for restricted Linux cloud CPUs)
+                    try:
+                        base_options = mp_tasks.BaseOptions(model_asset_buffer=model_bytes)
+                        options = mp_vision.FaceLandmarkerOptions(
+                            base_options=base_options,
+                            running_mode=RunningMode.IMAGE,
+                            num_faces=1,
+                            min_face_detection_confidence=0.25,
+                            min_face_presence_confidence=0.25,
+                            output_face_blendshapes=False,
+                        )
+                        self._detector = mp_vision.FaceLandmarker.create_from_options(options)
+                        self._available = True
+                        log.info("VisualFeatureExtractor initialised (fallback without blendshapes).")
+                    except Exception as exc2:
+                        self._init_error = f"FaceLandmarker init failed: {exc2}"
+                        log.error("FaceLandmarker fallback init failed: %s", exc2)
+                        log.warning("Visual features will be unavailable.")
         else:
+            self._init_error = "MediaPipe unavailable (_HAS_MEDIAPIPE=False)"
             log.warning("MediaPipe unavailable — visual features disabled.")
 
         # State
@@ -204,12 +234,15 @@ class VisualFeatureExtractor:
             return feat
 
         try:
-            # Convert BGR → RGB for MediaPipe
+            # Convert BGR → RGB for MediaPipe and ensure C-contiguous memory
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            if not rgb.flags.c_contiguous:
+                rgb = np.ascontiguousarray(rgb)
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
             detection_result = self._detector.detect(mp_image)
         except Exception as exc:
-            log.debug("FaceLandmarker detection error: %s", exc)
+            self._last_detect_error = f"{type(exc).__name__}: {exc}"
+            log.error("FaceLandmarker detection error: %s", exc)
             feat.annotated_frame = annotated
             return feat
 
